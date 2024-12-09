@@ -1,3 +1,3 @@
-module no_bugs/main
+module no_bugs
 
 go 1.19
