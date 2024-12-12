@@ -1,42 +1,99 @@
 package main
 
 import (
+	"os"
 	"strconv"
 	"syscall"
+	"time"
 )
 
+type tracee struct {
+	Proc  *os.Process
+	PGid  int
+	Wstat syscall.WaitStatus // no initial value!
+}
+
 func main() {
-	Traced, err := StartProcess("aslr", nil)
+	tracee := setup("aslr", nil)
+
+	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+uintptr(0x140), []byte{0xCC})
+	syscall.PtraceCont(tracee.Proc.Pid, 0)
+
+	for {
+		wpid, err := syscall.Wait4(tracee.PGid*-1, &tracee.Wstat, 0, nil)
+		ErrCheck(err)
+
+		if tracee.Wstat.Exited() {
+			if tracee.Proc.Pid == wpid {
+				break
+			}
+		} else {
+			if tracee.Wstat.StopSignal() == syscall.SIGTRAP && tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
+				regs := syscall.PtraceRegs{}
+
+				syscall.PtraceGetRegs(wpid, &regs)
+
+				out := []byte{}
+
+				syscall.PtracePeekData(wpid, uintptr(regs.Rip), out)
+
+				println("Rip: ", strconv.FormatUint(regs.Rip, 16), " ", out)
+
+				syscall.PtraceSingleStep(wpid)
+
+				time.Sleep(time.Millisecond * 500)
+			}
+		}
+	}
+}
+
+func StartProcess(name string, argv []string) (*os.Process, error) {
+	proc, err := os.StartProcess(name, argv, &os.ProcAttr{
+		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		Sys: &syscall.SysProcAttr{
+			Ptrace:    true,
+			Pdeathsig: syscall.SIGCHLD,
+		},
+	})
 
 	if err != nil {
-		println("Process can't be started. Exiting.")
-		return
+		return nil, err
 	}
 
-	Traced.SetOptions(syscall.PTRACE_O_TRACECLONE)
-	Traced.SetOptions(syscall.PTRACE_O_TRACEFORK)
+	state, err := proc.Wait()
 
-	Traced.Wait4()
+	if err != nil {
+		return nil, err
+	}
 
-	regs, _ := Traced.GetRegisters()
+	println(state.String())
 
-	println(strconv.FormatUint(regs.Rip, 16))
+	return proc, nil
+}
 
-	Traced.SingleStep()
+func setup(name string, argv []string) *tracee {
+	proc, err := StartProcess(name, argv)
 
-	Traced.Wait4()
+	ErrCheck(err)
 
-	println(Traced.Wstat.TrapCause())
+	pgid, err := syscall.Getpgid(proc.Pid)
 
-	regs, _ = Traced.GetRegisters()
+	ErrCheck(err)
 
-	println("Rip: ", strconv.FormatUint(regs.Rip, 16))
+	syscall.PtraceSetOptions(proc.Pid, syscall.PTRACE_O_TRACECLONE)
+	syscall.PtraceSetOptions(proc.Pid, syscall.PTRACE_O_TRACEFORK)
 
-	out := []byte{}
+	t := tracee{
+		Proc: proc,
+		PGid: pgid,
+	}
 
-	Traced.PeekData(uintptr(regs.Rip), out)
+	return &t
+}
 
-	println(out)
-
-	Traced.Cont(syscall.SIGCONT)
+func ErrCheck(err error) {
+	if err != nil {
+		println(err.Error())
+		panic(err)
+	}
 }
