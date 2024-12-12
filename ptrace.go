@@ -7,6 +7,7 @@ import (
 
 type Tracee struct {
 	Process *os.Process
+	Wstat   syscall.WaitStatus
 }
 
 func StartProcess(name string, argv []string) (*Tracee, error) {
@@ -17,6 +18,8 @@ func StartProcess(name string, argv []string) (*Tracee, error) {
 			Pdeathsig: syscall.SIGCHLD,
 		},
 	})
+
+	//proc.Signal(os.Interrupt)
 
 	trac := &Tracee{
 		Process: proc,
@@ -46,7 +49,7 @@ func Attach(tracee *Tracee) error {
 	return nil
 }
 
-// Continue until tracee sends signal in input.
+// Continue with sent syscall.
 func (t *Tracee) Cont(sig syscall.Signal) error {
 	return syscall.PtraceCont(t.Process.Pid, int(sig))
 }
@@ -57,7 +60,7 @@ func (t *Tracee) Detatch(sig syscall.Signal) error {
 }
 
 // Event messages are sent by the tracee to indicate how the process continued.
-func (t *Tracee) GetEventMessage(sig syscall.Signal) (uint, error) {
+func (t *Tracee) GetEventMessage() (uint, error) {
 	return syscall.PtraceGetEventMsg(t.Process.Pid)
 }
 
@@ -86,36 +89,19 @@ func (t *Tracee) SingleStep() error {
 	return syscall.PtraceSingleStep(t.Process.Pid)
 }
 
-func (t *Tracee) Wait() (syscall.WaitStatus, error) {
-	state, err := t.Process.Wait()
-	if err != nil {
-		return state.Sys().(syscall.WaitStatus), err
-	}
-	return state.Sys().(syscall.WaitStatus), nil
-}
-
 // Send a syscall to the tracee and check the response
-func (t *Tracee) Syscall(sig syscall.Signal) (uint64, error) {
+func (t *Tracee) Syscall(sig syscall.Signal) error {
 	err := syscall.PtraceSyscall(t.Process.Pid, int(sig))
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	// Wait4 waits for a status change in the tracee
-	status := syscall.WaitStatus(0)
-	_, err = syscall.Wait4(t.Process.Pid, &status, 0, nil)
+	return nil
+}
 
-	if err != nil {
-		return 0, err
-	}
-
-	// Minek az RAX?
-	regs, err := t.GetRegisters()
-	if err != nil {
-		return 0, err
-	}
-
-	return regs.Orig_rax, nil
+// Stop until new ptrace instruction. Waitstatus is part of the Tracee struct.
+func (t *Tracee) Wait4() {
+	syscall.Wait4(t.Process.Pid, &t.Wstat, 0, nil)
 }
 
 // Get general purpose register values.
