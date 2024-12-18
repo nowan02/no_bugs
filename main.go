@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -16,8 +17,10 @@ type tracee struct {
 func main() {
 	tracee := setup("aslr", nil)
 
-	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+uintptr(0x140), []byte{0xCC})
+	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
+
+	data := make([]byte, 0, 1024)
 
 	for {
 		wpid, err := syscall.Wait4(tracee.PGid*-1, &tracee.Wstat, 0, nil)
@@ -33,11 +36,13 @@ func main() {
 
 				syscall.PtraceGetRegs(wpid, &regs)
 
-				out := []byte{}
+				syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0x55})
 
-				syscall.PtracePeekData(wpid, uintptr(regs.Rip), out)
+				_, err := syscall.PtracePeekText(wpid, uintptr(regs.Rip), data)
 
-				println("Rip: ", strconv.FormatUint(regs.Rip, 16), " ", out)
+				ErrCheck(err)
+
+				println("Rip: ", strconv.FormatUint(regs.Rip, 16), " ", data)
 
 				syscall.PtraceSingleStep(wpid)
 
@@ -45,9 +50,12 @@ func main() {
 			}
 		}
 	}
+	syscall.PtraceCont(tracee.Proc.Pid, 0)
+	runtime.UnlockOSThread()
 }
 
 func StartProcess(name string, argv []string) (*os.Process, error) {
+	runtime.LockOSThread()
 	proc, err := os.StartProcess(name, argv, &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Sys: &syscall.SysProcAttr{
