@@ -1,5 +1,20 @@
 package main
 
+//#include <stdio.h>
+//#include <stdlib.h>
+//#include <string.h>
+//#include <sys/ptrace.h>
+//#include <sys/types.h>
+//#include <sys/wait.h>
+//#include <sys/user.h>
+//#include <sys/syscall.h>
+//#include <unistd.h>
+//long instruction(int pid) {
+//	struct user_regs_struct regs;
+//	ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+//	return ptrace(PTRACE_PEEKDATA, pid, regs.rip, NULL);
+//}
+import "C"
 import (
 	"os"
 	"runtime"
@@ -20,8 +35,6 @@ func main() {
 	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
 
-	data := make([]byte, 0, 1024)
-
 	for {
 		wpid, err := syscall.Wait4(tracee.PGid*-1, &tracee.Wstat, 0, nil)
 		ErrCheck(err)
@@ -38,11 +51,9 @@ func main() {
 
 				syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0x55})
 
-				_, err := syscall.PtracePeekText(wpid, uintptr(regs.Rip), data)
+				ins := C.instruction(C.int(wpid))
 
-				ErrCheck(err)
-
-				println("Rip: ", strconv.FormatUint(regs.Rip, 16), " ", data)
+				println("Rip: ", strconv.FormatUint(regs.Rip, 16), " ", strconv.FormatInt(int64(ins), 16))
 
 				syscall.PtraceSingleStep(wpid)
 
