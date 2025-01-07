@@ -1,18 +1,11 @@
 package main
 
-//#include <stdio.h>
-//#include <stdlib.h>
-//#include <string.h>
 //#include <sys/ptrace.h>
 //#include <sys/types.h>
-//#include <sys/wait.h>
-//#include <sys/user.h>
 //#include <sys/syscall.h>
-//#include <unistd.h>
-//long instruction(int pid) {
-//	struct user_regs_struct regs;
-//	ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-//	return ptrace(PTRACE_PEEKDATA, pid, regs.rip, NULL);
+//#include <stdint.h>
+//unsigned long instruction(int pid, uint64_t prev_rip) {
+//	return ptrace(PTRACE_PEEKDATA, pid, prev_rip, NULL);
 //}
 import "C"
 import (
@@ -35,9 +28,23 @@ func main() {
 	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
 
+	prev_rip := uint64(0)
+
+	prev_inst := uint64(0)
+
+	regs := syscall.PtraceRegs{}
+
 	for {
 		wpid, err := syscall.Wait4(tracee.PGid*-1, &tracee.Wstat, 0, nil)
 		ErrCheck(err)
+
+		prev_rip = regs.Rip
+
+		prev_inst = uint64(C.instruction(C.int(wpid), C.ulong(prev_rip)))
+
+		inst := C.instruction(C.int(wpid), C.ulong(regs.Rip))
+
+		regs = syscall.PtraceRegs{}
 
 		if tracee.Wstat.Exited() {
 			if tracee.Proc.Pid == wpid {
@@ -45,15 +52,14 @@ func main() {
 			}
 		} else {
 			if tracee.Wstat.StopSignal() == syscall.SIGTRAP && tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
-				regs := syscall.PtraceRegs{}
 
 				syscall.PtraceGetRegs(wpid, &regs)
 
 				syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0x55})
 
-				ins := C.instruction(C.int(wpid))
+				format_littleendian(prev_rip, regs.Rip, prev_inst)
 
-				println("Rip: ", strconv.FormatUint(regs.Rip, 16), " ", strconv.FormatInt(int64(ins), 16))
+				println("\nNormal print Rip: ", strconv.FormatUint(regs.Rip, 16), " ", strconv.FormatUint(uint64(inst), 16), "\n")
 
 				syscall.PtraceSingleStep(wpid)
 
