@@ -11,7 +11,6 @@ import "C"
 import (
 	"os"
 	"runtime"
-	"strconv"
 	"syscall"
 	"time"
 )
@@ -25,7 +24,7 @@ type tracee struct {
 func main() {
 	tracee := setup("aslr", nil)
 
-	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0xCC})
+	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x129, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
 
 	prev_rip := uint64(0)
@@ -42,8 +41,6 @@ func main() {
 
 		prev_inst = uint64(C.instruction(C.int(wpid), C.ulong(prev_rip)))
 
-		inst := C.instruction(C.int(wpid), C.ulong(regs.Rip))
-
 		regs = syscall.PtraceRegs{}
 
 		if tracee.Wstat.Exited() {
@@ -55,18 +52,20 @@ func main() {
 
 				syscall.PtraceGetRegs(wpid, &regs)
 
-				syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x130, []byte{0x55})
-
 				format_littleendian(prev_rip, regs.Rip, prev_inst)
-
-				println("\nNormal print Rip: ", strconv.FormatUint(regs.Rip, 16), " ", strconv.FormatUint(uint64(inst), 16), "\n")
-
-				syscall.PtraceSingleStep(wpid)
-
-				time.Sleep(time.Millisecond * 500)
 			}
 		}
+
+		if tracee.Wstat.StopSignal() == 11 || tracee.Wstat.StopSignal() == 4 {
+			println("Segfault")
+			break
+		}
+
+		println("Current stop signal: ", tracee.Wstat.StopSignal())
+		syscall.PtraceSingleStep(wpid)
+		time.Sleep(time.Millisecond * 100)
 	}
+
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
 	runtime.UnlockOSThread()
 }
