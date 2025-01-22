@@ -24,7 +24,9 @@ type tracee struct {
 func main() {
 	tracee := setup("aslr", nil)
 
-	breakpoint_address := FindTextareaLinux(tracee.Proc.Pid) + 0x130
+	textarea_begin, textarea_end := FindTextareaLinux(tracee.Proc.Pid)
+
+	breakpoint_address := textarea_begin + 0x130
 
 	syscall.PtracePokeData(tracee.Proc.Pid, breakpoint_address, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
@@ -50,6 +52,13 @@ func main() {
 
 				current_inst = uint64(C.instruction(C.int(wpid), C.ulong(regs.Rip)))
 
+				if regs.Rip > uint64(textarea_end) || regs.Rip < uint64(textarea_begin) {
+					println("End of main()")
+					syscall.PtraceCont(wpid, 0)
+					runtime.UnlockOSThread()
+					break
+				}
+
 				// Program stops one byte after the breakpoint, we get the break instruction address by decrementing RIP
 				// Pretty retarded but it is what it is
 				if breakpoint_stop {
@@ -69,23 +78,12 @@ func main() {
 			}
 		}
 
-		if tracee.Wstat.StopSignal() == 11 {
-			println("Segfault")
-			break
-		}
-
-		if tracee.Wstat.StopSignal() == 4 {
-			println("Illegal operation")
-			break
-		}
-
-		println("Current stop signal: ", tracee.Wstat.StopSignal())
+		println("Current stop signal: ", tracee.Wstat.StopSignal().String())
 		syscall.PtraceSingleStep(wpid)
 		time.Sleep(time.Millisecond * 100)
 	}
 
-	syscall.PtraceCont(tracee.Proc.Pid, 0)
-	runtime.UnlockOSThread()
+	println("Program exited.")
 }
 
 func StartProcess(name string, argv []string) (*os.Process, error) {
