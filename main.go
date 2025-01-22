@@ -4,8 +4,8 @@ package main
 //#include <sys/types.h>
 //#include <sys/syscall.h>
 //#include <stdint.h>
-//unsigned long instruction(int pid, uint64_t prev_rip) {
-//	return ptrace(PTRACE_PEEKDATA, pid, prev_rip, NULL);
+//unsigned long instruction(int pid, uint64_t rip) {
+//	return ptrace(PTRACE_PEEKDATA, pid, rip, NULL);
 //}
 import "C"
 import (
@@ -24,24 +24,20 @@ type tracee struct {
 func main() {
 	tracee := setup("aslr", nil)
 
-	syscall.PtracePokeData(tracee.Proc.Pid, FindTextareaLinux(tracee.Proc.Pid)+0x129, []byte{0xCC})
+	breakpoint_address := FindTextareaLinux(tracee.Proc.Pid) + 0x130
+
+	syscall.PtracePokeData(tracee.Proc.Pid, breakpoint_address, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
 
-	prev_rip := uint64(0)
+	breakpoint_stop := true
 
-	prev_inst := uint64(0)
+	current_inst := uint64(0)
 
 	regs := syscall.PtraceRegs{}
 
 	for {
 		wpid, err := syscall.Wait4(tracee.PGid*-1, &tracee.Wstat, 0, nil)
 		ErrCheck(err)
-
-		prev_rip = regs.Rip
-
-		prev_inst = uint64(C.instruction(C.int(wpid), C.ulong(prev_rip)))
-
-		regs = syscall.PtraceRegs{}
 
 		if tracee.Wstat.Exited() {
 			if tracee.Proc.Pid == wpid {
@@ -52,12 +48,34 @@ func main() {
 
 				syscall.PtraceGetRegs(wpid, &regs)
 
-				format_littleendian(prev_rip, regs.Rip, prev_inst)
+				current_inst = uint64(C.instruction(C.int(wpid), C.ulong(regs.Rip)))
+
+				// Program stops one byte after the breakpoint, we get the break instruction address by decrementing RIP
+				// Pretty retarded but it is what it is
+				if breakpoint_stop {
+					// At the entry of main, "push RBP" needs to be restored so we don't destroy the stack.
+					println("Stopped at breakpoint, replacing with original")
+
+					syscall.PtracePokeData(wpid, uintptr(breakpoint_address), []byte{0x55})
+
+					regs.Rip -= 1
+
+					syscall.PtraceSetRegs(wpid, &regs)
+
+					breakpoint_stop = false
+				} else {
+					format_littleendian(regs.Rip, regs.Rip, current_inst)
+				}
 			}
 		}
 
-		if tracee.Wstat.StopSignal() == 11 || tracee.Wstat.StopSignal() == 4 {
+		if tracee.Wstat.StopSignal() == 11 {
 			println("Segfault")
+			break
+		}
+
+		if tracee.Wstat.StopSignal() == 4 {
+			println("Illegal operation")
 			break
 		}
 
