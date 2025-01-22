@@ -52,6 +52,7 @@ func main() {
 
 				current_inst = uint64(C.instruction(C.int(wpid), C.ulong(regs.Rip)))
 
+				// THIS DOES NOT SUPPORT STEPPING INTO CLIB!!!
 				if regs.Rip > uint64(textarea_end) || regs.Rip < uint64(textarea_begin) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
