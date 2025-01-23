@@ -26,7 +26,7 @@ func main() {
 
 	textarea_begin, textarea_end := FindTextareaLinux(tracee.Proc.Pid)
 
-	breakpoint_address := textarea_begin + 0x139
+	breakpoint_address := textarea_begin + 0x187
 
 	syscall.PtracePokeData(tracee.Proc.Pid, breakpoint_address, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
@@ -66,7 +66,7 @@ func main() {
 					// At the entry of main, "push RBP" needs to be restored so we don't destroy the stack.
 					println("Stopped at breakpoint, replacing with original")
 
-					syscall.PtracePokeData(wpid, uintptr(breakpoint_address), []byte{0x55})
+					syscall.PtracePokeData(wpid, uintptr(breakpoint_address), []byte{0xb8})
 
 					regs.Rip -= 1
 
@@ -81,7 +81,7 @@ func main() {
 
 		println("Current stop signal: ", tracee.Wstat.StopSignal().String())
 		syscall.PtraceSingleStep(wpid)
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	println("Program exited.")
