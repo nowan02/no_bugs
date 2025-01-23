@@ -22,11 +22,11 @@ type tracee struct {
 }
 
 func main() {
-	tracee := setup("aslr", nil)
+	tracee := setup("ai.out", nil)
 
 	textarea_begin, textarea_end := FindTextareaLinux(tracee.Proc.Pid)
 
-	breakpoint_address := textarea_begin + 0x130
+	breakpoint_address := textarea_begin + 0x139
 
 	syscall.PtracePokeData(tracee.Proc.Pid, breakpoint_address, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
@@ -81,7 +81,7 @@ func main() {
 
 		println("Current stop signal: ", tracee.Wstat.StopSignal().String())
 		syscall.PtraceSingleStep(wpid)
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 500)
 	}
 
 	println("Program exited.")
