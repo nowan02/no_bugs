@@ -9,10 +9,11 @@ package main
 //}
 import "C"
 import (
+	"bufio"
 	"os"
 	"runtime"
+	"strconv"
 	"syscall"
-	"time"
 )
 
 type tracee struct {
@@ -26,14 +27,12 @@ func main() {
 
 	textarea_begin, textarea_end := FindTextareaLinux(tracee.Proc.Pid)
 
-	breakpoint_address := textarea_begin + 0x187
+	breakpoint_address := textarea_begin + 0x18c
 
 	syscall.PtracePokeData(tracee.Proc.Pid, breakpoint_address, []byte{0xCC})
 	syscall.PtraceCont(tracee.Proc.Pid, 0)
 
 	breakpoint_stop := true
-
-	current_inst := uint64(0)
 
 	regs := syscall.PtraceRegs{}
 
@@ -50,9 +49,7 @@ func main() {
 
 				syscall.PtraceGetRegs(wpid, &regs)
 
-				current_inst = uint64(C.instruction(C.int(wpid), C.ulong(regs.Rip)))
-
-				// THIS DOES NOT SUPPORT STEPPING INTO CLIB!!!
+				// Temporary, does not support stepping into other areas.
 				if regs.Rip > uint64(textarea_end) || regs.Rip < uint64(textarea_begin) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
@@ -64,24 +61,26 @@ func main() {
 				// Pretty retarded but it is what it is
 				if breakpoint_stop {
 					// At the entry of main, "push RBP" needs to be restored so we don't destroy the stack.
-					println("Stopped at breakpoint, replacing with original")
+					println("Stopped at breakpoint ", strconv.FormatUint(regs.Rip-1, 16))
 
-					syscall.PtracePokeData(wpid, uintptr(breakpoint_address), []byte{0xb8})
+					syscall.PtracePokeData(wpid, uintptr(breakpoint_address), []byte{0xc9})
 
 					regs.Rip -= 1
 
 					syscall.PtraceSetRegs(wpid, &regs)
 
 					breakpoint_stop = false
-				} else {
-					format_littleendian(regs.Rip, regs.Rip, current_inst)
 				}
+
+				PrintRegisters(&regs)
 			}
 		}
 
-		println("Current stop signal: ", tracee.Wstat.StopSignal().String())
+		println("\nCurrent stop signal: ", tracee.Wstat.StopSignal().String())
 		syscall.PtraceSingleStep(wpid)
-		time.Sleep(time.Millisecond * 100)
+
+		reader := bufio.NewReader(os.Stdin)
+		reader.ReadString('\n')
 	}
 
 	println("Program exited.")
@@ -107,7 +106,7 @@ func StartProcess(name string, argv []string) (*os.Process, error) {
 		return nil, err
 	}
 
-	println(state.String())
+	println("Process no. ", proc.Pid, " started with state: ", state.String())
 
 	return proc, nil
 }
