@@ -23,6 +23,10 @@ type tracee struct {
 }
 
 func main() {
+	parseElf("bin/ai.out")
+}
+
+func debug() {
 	tracee := setup("ai.out", nil)
 
 	textarea_begin, textarea_end := FindTextareaLinux(tracee.Proc.Pid)
@@ -57,17 +61,11 @@ func main() {
 					break
 				}
 
-				// Program stops one byte after the breakpoint, we get the break instruction address by decrementing RIP
-				// Pretty retarded but it is what it is
 				if breakpoint_stop {
 					// At the entry of main, "push RBP" needs to be restored so we don't destroy the stack.
 					println("Stopped at breakpoint ", strconv.FormatUint(regs.Rip-1, 16))
 
-					syscall.PtracePokeData(wpid, uintptr(breakpoint_address), []byte{0xc9})
-
-					regs.Rip -= 1
-
-					syscall.PtraceSetRegs(wpid, &regs)
+					ReplaceBreakpoint(wpid, uintptr(breakpoint_address), &regs, []byte{0xc9})
 
 					breakpoint_stop = false
 				}
@@ -131,6 +129,7 @@ func setup(name string, argv []string) *tracee {
 	return &t
 }
 
+// REFACTOR!
 func ErrCheck(err error) {
 	if err != nil {
 		println(err.Error())
