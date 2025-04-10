@@ -23,7 +23,9 @@ type tracee struct {
 }
 
 func main() {
-	parseElf("bin/ai.out")
+	ctx, err := Init("ai.out")
+	ErrCheck(err)
+	ctx.PrintState()
 }
 
 func debug() {
