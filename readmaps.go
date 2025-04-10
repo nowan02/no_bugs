@@ -9,7 +9,7 @@ import (
 )
 
 // First return: start of the textarea, second return: end
-func FindTextareaLinux(pid int) (uintptr, uintptr) {
+func FindTextareaLinux(pid int, ExeName string) (uintptr, uintptr) {
 	maps, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 
 	ErrCheck(err)
@@ -19,13 +19,19 @@ func FindTextareaLinux(pid int) (uintptr, uintptr) {
 	scanner.Split(bufio.ScanLines)
 
 	textareastart, textareaend := "", ""
+	prev_end := ""
 
 	for scanner.Scan() {
 		currentline := strings.Split(scanner.Text(), " ")
 
-		if currentline[1] == "r-xp" {
-			textareastart = strings.Split(currentline[0], "-")[0]
-			textareaend = strings.Split(currentline[0], "-")[1]
+		if strings.Contains(currentline[len(currentline)-1], ExeName) {
+			if textareastart == "" {
+				textareastart = strings.Split(currentline[0], "-")[0]
+			}
+
+			prev_end = strings.Split(currentline[0], "-")[1]
+		} else {
+			textareaend = prev_end
 			break
 		}
 	}

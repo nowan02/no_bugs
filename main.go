@@ -1,13 +1,5 @@
 package main
 
-//#include <sys/ptrace.h>
-//#include <sys/types.h>
-//#include <sys/syscall.h>
-//#include <stdint.h>
-//unsigned long instruction(int pid, uint64_t rip) {
-//	return ptrace(PTRACE_PEEKDATA, pid, rip, NULL);
-//}
-import "C"
 import (
 	"bufio"
 	"os"
@@ -16,47 +8,49 @@ import (
 	"syscall"
 )
 
-type tracee struct {
+type Tracee struct {
 	Proc  *os.Process
 	PGid  int
 	Wstat syscall.WaitStatus // no initial value!
 }
 
 func main() {
-	ctx, err := Init("ai.out")
+	ExeName := "bin/example.out"
+
+	ctx, err := InitContext(ExeName)
 	ErrCheck(err)
 	ctx.PrintState()
+
+	Tracee := setup(ExeName, nil)
+	TextAreaBegin, TextAreaEnd := FindTextareaLinux(Tracee.Proc.Pid, ExeName)
+	SetBreakpoint(Tracee.Proc.Pid, TextAreaBegin+uintptr(ctx.entrypoint), ctx)
+
+	debug(TextAreaBegin, TextAreaEnd, Tracee, ctx)
+
 }
 
-func debug() {
-	tracee := setup("ai.out", nil)
-
-	textarea_begin, textarea_end := FindTextareaLinux(tracee.Proc.Pid)
-
-	breakpoint_address := textarea_begin + 0x18c
-
-	syscall.PtracePokeData(tracee.Proc.Pid, breakpoint_address, []byte{0xCC})
-	syscall.PtraceCont(tracee.Proc.Pid, 0)
+func debug(TextAreaBegin uintptr, TextAreaEnd uintptr, Tracee *Tracee, Context *DebugContext) {
+	syscall.PtraceCont(Tracee.Proc.Pid, 0)
 
 	breakpoint_stop := true
 
 	regs := syscall.PtraceRegs{}
 
 	for {
-		wpid, err := syscall.Wait4(tracee.PGid*-1, &tracee.Wstat, 0, nil)
+		wpid, err := syscall.Wait4(Tracee.PGid*-1, &Tracee.Wstat, 0, nil)
 		ErrCheck(err)
 
-		if tracee.Wstat.Exited() {
-			if tracee.Proc.Pid == wpid {
+		if Tracee.Wstat.Exited() {
+			if Tracee.Proc.Pid == wpid {
 				break
 			}
 		} else {
-			if tracee.Wstat.StopSignal() == syscall.SIGTRAP && tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
+			if Tracee.Wstat.StopSignal() == syscall.SIGTRAP && Tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
 
 				syscall.PtraceGetRegs(wpid, &regs)
 
 				// Temporary, does not support stepping into other areas.
-				if regs.Rip > uint64(textarea_end) || regs.Rip < uint64(textarea_begin) {
+				if regs.Rip > uint64(TextAreaEnd) || regs.Rip < uint64(TextAreaBegin) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
 					runtime.UnlockOSThread()
@@ -67,7 +61,7 @@ func debug() {
 					// At the entry of main, "push RBP" needs to be restored so we don't destroy the stack.
 					println("Stopped at breakpoint ", strconv.FormatUint(regs.Rip-1, 16))
 
-					ReplaceBreakpoint(wpid, uintptr(breakpoint_address), &regs, []byte{0xc9})
+					ReplaceBreakpoint(wpid, uintptr(regs.Rip-1), &regs, Context)
 
 					breakpoint_stop = false
 				}
@@ -76,7 +70,7 @@ func debug() {
 			}
 		}
 
-		println("\nCurrent stop signal: ", tracee.Wstat.StopSignal().String())
+		println("\nCurrent stop signal: ", Tracee.Wstat.StopSignal().String())
 		syscall.PtraceSingleStep(wpid)
 
 		reader := bufio.NewReader(os.Stdin)
@@ -111,7 +105,7 @@ func StartProcess(name string, argv []string) (*os.Process, error) {
 	return proc, nil
 }
 
-func setup(name string, argv []string) *tracee {
+func setup(name string, argv []string) *Tracee {
 	proc, err := StartProcess(name, argv)
 
 	ErrCheck(err)
@@ -123,7 +117,7 @@ func setup(name string, argv []string) *tracee {
 	syscall.PtraceSetOptions(proc.Pid, syscall.PTRACE_O_TRACECLONE)
 	syscall.PtraceSetOptions(proc.Pid, syscall.PTRACE_O_TRACEFORK)
 
-	t := tracee{
+	t := Tracee{
 		Proc: proc,
 		PGid: pgid,
 	}
