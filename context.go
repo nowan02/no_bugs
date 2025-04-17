@@ -34,6 +34,16 @@ type DebugContext struct {
 
 	// Current position of the program count RIP
 	current_pc uint64
+
+	// Start address of the text area of the executable
+	textarea_begin uint64
+
+	// End address of the text area of the executable
+	textarea_end uint64
+
+	// Call stack of the program, stack based, where the last subprograms dwarf entry is at the top
+	// which is the current subprogram the PC is in.
+	callstack CallStack
 }
 
 // Initializes the debugger context
@@ -64,6 +74,10 @@ func InitContext(ExePath string) (*DebugContext, error) {
 		followed_sym: syms,
 		breakpoints:  bps,
 		entrypoint:   0,
+		callstack:    *NewCallStack(),
+
+		textarea_begin: 0,
+		textarea_end:   0,
 
 		current_file:  "",
 		current_instr: "",
@@ -88,7 +102,6 @@ func InitContext(ExePath string) (*DebugContext, error) {
 				return nil, err
 			}
 
-			ctx.entrypoint = entry.AttrField(dwarf.AttrLowpc).Val.(uint64)
 			filename := entry.AttrField(dwarf.AttrName).Val.(string)
 			path := entry.AttrField(dwarf.AttrCompDir).Val.(string)
 
@@ -107,7 +120,10 @@ func InitContext(ExePath string) (*DebugContext, error) {
 
 				ctx.lines = append(ctx.lines, line)
 			}
+		}
 
+		if entry.Tag == dwarf.TagSubprogram && entry.AttrField(dwarf.AttrName).Val == "main" {
+			ctx.entrypoint = entry.AttrField(dwarf.AttrLowpc).Val.(uint64)
 			return ctx, nil
 		}
 	}

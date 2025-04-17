@@ -9,7 +9,7 @@ import (
 )
 
 // First return: start of the textarea, second return: end
-func FindTextareaLinux(pid int, ExeName string) (uintptr, uintptr) {
+func FindTextareaLinux(pid int, ExeName string) (uint64, uint64) {
 	maps, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
 
 	ErrCheck(err)
@@ -46,5 +46,5 @@ func FindTextareaLinux(pid int, ExeName string) (uintptr, uintptr) {
 
 	ErrCheck(err)
 
-	return uintptr(begin_addr), uintptr(end_addr)
+	return begin_addr, end_addr
 }

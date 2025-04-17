@@ -16,8 +16,9 @@
 TODO:
 
 - Breakpoint setting and replacing should not be hardcoded
-- Figure out translation of bytecode
 - If leaving textarea address space, do not stop the program. Place breakpoint after the called external function (eg.: printf) and continue.
 - After instruction translation is figured out, connect with symbol table, and file lines.
     - LLVM compilers produce the same symbol table and debug symbols regardless of language?
     - gosym for go.
+
+- determine when a subprogram returns to pop from callstack
