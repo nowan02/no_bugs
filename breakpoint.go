@@ -11,12 +11,23 @@ import "C"
 
 import "syscall"
 
+// Wrapper for C function
+// Read n bytes of data from location
+func PeekDataWrapper(pid int, address uintptr, Context *DebugContext, length int) []byte {
+	data := make([]byte, length)
+
+	for i := 0; i < length; i++ {
+		data[i] = byte(C.PeekData(C.int(pid), C.uint64_t(address)))
+		address++
+	}
+
+	return data
+}
+
 // Sets breakpoint and saves replaced data to context
 func SetBreakpoint(pid int, address uintptr, Context *DebugContext) {
 
-	original := []byte{}
-
-	original = append(original, byte(C.PeekData(C.int(pid), C.uint64_t(address))))
+	original := PeekDataWrapper(pid, address, Context, 1)
 
 	syscall.PtracePokeData(pid, address, []byte{0xCC})
 

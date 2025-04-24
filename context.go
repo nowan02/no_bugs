@@ -8,6 +8,9 @@ import (
 )
 
 type DebugContext struct {
+	// Tracee
+	tracee *Tracee
+
 	// DWARF debug info
 	dwarfinfo *dwarf.Data
 
@@ -69,6 +72,7 @@ func InitContext(ExePath string) (*DebugContext, error) {
 	var bps = make(map[uintptr][]byte)
 
 	var ctx = &DebugContext{
+		tracee:       nil,
 		dwarfinfo:    dwarfinfo,
 		lines:        lines,
 		followed_sym: syms,
@@ -138,4 +142,19 @@ func (ctx DebugContext) PrintState() {
 
 	println("Source file:")
 	println("\t", ctx.current_file)
+}
+
+func (ctx DebugContext) PrintFollowedSyms() {
+	println("Variables:")
+	for _, v := range ctx.followed_sym {
+		offs, err := VariableOffset(v)
+
+		if err != nil {
+			print(err)
+		}
+
+		if offs < 0 {
+
+		}
+	}
 }
