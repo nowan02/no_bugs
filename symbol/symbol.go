@@ -1,4 +1,4 @@
-package main
+package symbol
 
 import (
 	"debug/dwarf"
@@ -9,10 +9,11 @@ import (
 // Looks for a symbol in the symbol table and returns the corresponding entry.
 // Name and tag should be specified.
 // Returns nil if the symbol is not found.
-func LookForSymbolByName(SymbolName string, SymbolType dwarf.Tag, Context *DebugContext) (*dwarf.Entry, error) {
-	reader := Context.dwarfinfo.Reader()
+func (Context *DebugContext) LookForSymbolByName(SymbolName string, SymbolType dwarf.Tag) (*dwarf.Entry, error) {
+	Context.DwarfReader.Seek(0)
+
 	for {
-		entry, err := reader.Next()
+		entry, err := Context.DwarfReader.Next()
 
 		if entry == nil {
 			break
@@ -32,13 +33,14 @@ func LookForSymbolByName(SymbolName string, SymbolType dwarf.Tag, Context *Debug
 	return nil, nil
 }
 
-func LookForSymbolByPC(Context *DebugContext) (*dwarf.Entry, error) {
-	reader := Context.dwarfinfo.Reader()
+func (Context *DebugContext) LookForSymbolByPC(Rip uint64) (*dwarf.Entry, error) {
 
-	offset := Context.current_pc - Context.textarea_begin - 1
+	offset := Rip - Context.TextareaBegin - 1
+
+	Context.DwarfReader.Seek(0)
 
 	for {
-		entry, err := reader.Next()
+		entry, err := Context.DwarfReader.Next()
 
 		if entry == nil {
 			break
@@ -58,12 +60,11 @@ func LookForSymbolByPC(Context *DebugContext) (*dwarf.Entry, error) {
 	return nil, nil
 }
 
-func LookForSymbolByDWARFOffset(offset dwarf.Offset, Context *DebugContext) (*dwarf.Entry, error) {
-	reader := Context.dwarfinfo.Reader()
+func (Context *DebugContext) LookForSymbolByDWARFOffset(offset dwarf.Offset) (*dwarf.Entry, error) {
 
-	reader.Seek(offset)
+	Context.DwarfReader.Seek(offset)
 
-	entry, err := reader.Next()
+	entry, err := Context.DwarfReader.Next()
 
 	return entry, err
 }

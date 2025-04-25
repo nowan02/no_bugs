@@ -1,4 +1,4 @@
-package main
+package target
 
 import (
 	"bufio"
@@ -9,10 +9,12 @@ import (
 )
 
 // First return: start of the textarea, second return: end
-func FindTextareaLinux(pid int, ExeName string) (uint64, uint64) {
-	maps, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
+func (t *Tracee) FindTextareaLinux() (uint64, uint64) {
+	maps, err := os.Open(fmt.Sprintf("/proc/%d/maps", t.Proc.Pid))
 
-	ErrCheck(err)
+	if err != nil {
+		panic(err)
+	}
 
 	scanner := bufio.NewScanner(maps)
 
@@ -24,7 +26,7 @@ func FindTextareaLinux(pid int, ExeName string) (uint64, uint64) {
 	for scanner.Scan() {
 		currentline := strings.Split(scanner.Text(), " ")
 
-		if strings.Contains(currentline[len(currentline)-1], ExeName) {
+		if strings.Contains(currentline[len(currentline)-1], t.ElfPath) {
 			if textareastart == "" {
 				textareastart = strings.Split(currentline[0], "-")[0]
 			}
@@ -40,11 +42,15 @@ func FindTextareaLinux(pid int, ExeName string) (uint64, uint64) {
 
 	begin_addr, err := strconv.ParseUint(textareastart, 16, 64)
 
-	ErrCheck(err)
+	if err != nil {
+		panic(err)
+	}
 
 	end_addr, err := strconv.ParseUint(textareaend, 16, 64)
 
-	ErrCheck(err)
+	if err != nil {
+		panic(err)
+	}
 
 	return begin_addr, end_addr
 }
