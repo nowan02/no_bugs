@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="template.css">
+    <title>no_bugs</title>
+</head>
+<body>
+    <div class="column-container">
+        <!--Control-->
+        <div>
+            <div class="row-container">
+                <div>
+                    <h4>Continue</h4>
+                </div>
+                <div>
+                    <h4>Step Over</h4>
+                </div>
+                <div>
+                    <h4>Step Into</h4>
+                </div>
+                <div>
+                    <h4>Step Out Of</h4>
+                </div>
+                <div>
+                    <h4>Stop</h4>
+                </div>
+            </div>
+            <!--Source Code-->
+            <div>
+                <ol>
+                    {{range .}}
+                        {{if .Current}}
+                            <li class="code" style="background-color:orange;color: black;">{{.Text}}</li>
+                        {{else}}
+                            <li class="code">{{.Text}}</li>
+                        {{end}}
+                    {{end}}
+                </ol>
+            </div>
+        </div>
+        <div class="column-container">
+            <!--Locals-->
+            <div>
+                
+            </div>
+            <!--Watch-->
+            <div>
+                
+            </div>
+            <!--Help-->
+            <div>
+                
+            </div>
+        </div>
+    </div>
+</body>
+</html>
