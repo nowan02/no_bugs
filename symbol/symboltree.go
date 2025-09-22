@@ -49,3 +49,22 @@ func InitNodes(Reader *dwarf.Reader, Parent *TreeLeaf) *TreeLeaf {
 
 	return Leaf
 }
+
+func (Context *DebugContext) InitializeSymbolTree() {
+	Context.DwarfReader.Seek(0)
+	for {
+		CompUnit := InitNodes(Context.DwarfReader, nil)
+		if CompUnit == nil {
+			break
+		}
+		Context.SymbolTreeRoot = append(Context.SymbolTreeRoot, CompUnit)
+	}
+}
+
+func (Context *DebugContext) SeekEntry() {
+	Context.DwarfReader.Seek(0)
+
+	for _, compunit := range Context.SymbolTreeRoot {
+		compunit.
+	}
+}

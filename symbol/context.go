@@ -88,17 +88,6 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 	return ctx, nil
 }
 
-func (Context *DebugContext) InitializeSymbolTree() {
-	Context.DwarfReader.Seek(0)
-	for {
-		CompUnit := InitNodes(Context.DwarfReader, nil)
-		if CompUnit == nil {
-			break
-		}
-		Context.SymbolTreeRoot = append(Context.SymbolTreeRoot, CompUnit)
-	}
-}
-
 func (Context *DebugContext) InitializeLineData(DwarfInfo *dwarf.Data) error {
 	for _, lvl1 := range Context.SymbolTreeRoot {
 		if lvl1.Self.Tag != dwarf.TagCompileUnit {
