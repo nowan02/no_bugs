@@ -152,18 +152,3 @@ func (ctx *DebugContext) PrintState() {
 	println("Source file:")
 	println("\t", ctx.CurrentFile)
 }
-
-func (ctx DebugContext) PrintFollowedSyms() {
-	println("Variables:")
-	for _, v := range ctx.FollowedSym {
-		offs, err := VariableOffset(v)
-
-		if err != nil {
-			print(err)
-		}
-
-		if offs < 0 {
-
-		}
-	}
-}

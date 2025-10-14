@@ -72,7 +72,7 @@ func (Context *DebugContext) LookForSymbolByDWARFOffset(offset dwarf.Offset) (*d
 // Gets dwarf entry and calculates offset
 // Since local variables always have a negative offset in relation to the stack pointer
 // positive values are assumed to be global offsets!
-func VariableOffset(Entry *dwarf.Entry) (int64, error) {
+func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int64) (uint64, error) {
 	data := Entry.AttrField(dwarf.AttrLocation).Val
 
 	if data == nil {
@@ -84,20 +84,29 @@ func VariableOffset(Entry *dwarf.Entry) (int64, error) {
 	if ok {
 		Opcode := DW_AT_location[0]
 
-		var offset_val []byte
+		var offset_bytes []byte
 
 		for i := 1; i < len(DW_AT_location); i++ { // get bytes after opcode
-			offset_val = append(offset_val, DW_AT_location[i])
+			offset_bytes = append(offset_bytes, DW_AT_location[i])
 		}
+
+		var offset_val int64 = 0
+		var data []byte = make([]byte, 0)
 
 		switch Opcode {
+		// Global offset
 		case 0x03:
-			return int64(binary.LittleEndian.Uint64(offset_val)), nil
+			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes))
+			address := Context.TextareaBegin + uint64(offset_val)
+			data = PeekDataWrapper(Context.Target.Proc.Pid, uintptr(address), 8)
+		// Local offset
 		case 0x91:
-			return int64(binary.LittleEndian.Uint64(offset_val)) - 128 + 16, nil
+			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes)) - 128 + 16
+			data = PeekDataWrapper(Context.Target.Proc.Pid, uintptr(StackBase+offset_val), 8)
+		default:
+			return 0, errors.New("location data was not in the expected format ([]byte)")
 		}
 
+		return uint64(binary.LittleEndian.Uint64(data)), nil
 	}
-
-	return 0, errors.New("location data was not in the expected format ([]byte)")
 }

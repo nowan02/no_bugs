@@ -3,6 +3,7 @@ package symbol
 import (
 	"debug/dwarf"
 	"log"
+	"strconv"
 )
 
 // Leaves without parents are always Compilation Units.
@@ -61,10 +62,54 @@ func (Context *DebugContext) InitializeSymbolTree() {
 	}
 }
 
-func (Context *DebugContext) SeekEntry() {
+func (Context *DebugContext) SeekNode(Name string) *Variable {
 	Context.DwarfReader.Seek(0)
 
 	for _, compunit := range Context.SymbolTreeRoot {
-		compunit.
+		if compunit.Self.Tag == dwarf.TagCompileUnit && compunit.Self.AttrField(dwarf.AttrName).Val == Context.CurrentFile {
+			newVar := Context.seek(Name, compunit)
+			return newVar
+		}
 	}
+
+	return nil
+}
+
+func (Context *DebugContext) seek(Name string, Parent *TreeLeaf) *Variable {
+	var NewVar = &Variable{
+		Name:  Name,
+		Value: "Unknown",
+		Type:  "Unknown",
+	}
+
+	if Parent.Children == nil {
+		return NewVar
+	}
+
+	for _, child := range Parent.Children {
+		if child.Self.Tag == dwarf.TagVariable && child.Self.AttrField(dwarf.AttrName).Val == Name {
+
+			typeEntry, err := Context.LookForSymbolByDWARFOffset(dwarf.Offset(child.Self.AttrField(dwarf.AttrType).Attr))
+
+			if err != nil {
+				NewVar.Type = err.Error()
+			}
+
+			offs, err := VariableOffset(child.Self)
+
+			if err != nil {
+				NewVar.Value = err.Error()
+			}
+
+			NewVar.Type = typeEntry.AttrField(dwarf.AttrName).Attr.GoString()
+
+			NewVar.Value = strconv.FormatInt(valueEntry, 10)
+
+			return NewVar
+		} else {
+			return Context.seek(Name, child)
+		}
+	}
+
+	return NewVar
 }

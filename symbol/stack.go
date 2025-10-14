@@ -4,7 +4,7 @@ import (
 	"debug/dwarf"
 )
 
-// Stores the subprogram information and its bounds.
+// Stores the subprogram information and its base from where local vars can be calculated.
 type CallStackEntry struct {
 	// Subprogram symbol
 	Self *dwarf.Entry
