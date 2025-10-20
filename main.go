@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"debug/dwarf"
 	"no_bugs/symbol"
 	"no_bugs/target"
-	"os"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -21,7 +19,7 @@ func main() {
 
 	ctx.TextareaBegin, ctx.TextareaEnd = Tracee.FindTextareaLinux()
 
-	ctx.SetBreakpoint(Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+ctx.Entrypoint))
+	ctx.SetBreakpoint(Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+ctx.Entrypoint), true)
 
 	debug(ctx, Tracee)
 }
@@ -41,7 +39,7 @@ func Setup() (ctx *symbol.DebugContext, tracee *target.Tracee) {
 	// Place breakpoint on all subproram entries! Subprograms inside a comp unit are all on level 2 of the graph(?)
 	for _, lvl2 := range ctx.SymbolTreeRoot {
 		if lvl2.Self.Tag == dwarf.TagSubprogram {
-			ctx.SetBreakpoint(Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+uint64(lvl2.Self.Offset)))
+			ctx.SetBreakpoint(Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+uint64(lvl2.Self.Offset)), true)
 			// When base pointer value changes, we exited the subprogram.
 		}
 	}
@@ -52,8 +50,6 @@ func Setup() (ctx *symbol.DebugContext, tracee *target.Tracee) {
 func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
 	syscall.PtraceCont(Tracee.Proc.Pid, 0)
 
-	regs := syscall.PtraceRegs{}
-
 	for {
 		wpid, err := syscall.Wait4(Tracee.PGid*-1, &Tracee.Wstat, 0, nil)
 		ErrCheck(err)
@@ -66,10 +62,10 @@ func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
 			// Debugger is currently stopped at a breakpoint or used single step.
 			if Tracee.Wstat.StopSignal() == syscall.SIGTRAP && Tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
 
-				syscall.PtraceGetRegs(wpid, &regs)
+				syscall.PtraceGetRegs(wpid, Tracee.Regs)
 
 				// Temporary, does not support stepping into other areas.
-				if regs.Rip < uint64(Context.TextareaBegin) || regs.Rip > uint64(Context.TextareaEnd) {
+				if Tracee.Regs.Rip < uint64(Context.TextareaBegin) || Tracee.Regs.Rip > uint64(Context.TextareaEnd) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
 					runtime.UnlockOSThread()
@@ -78,93 +74,51 @@ func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
 
 				// We have to substract 1 from PC to get the breakpoint address, since
 				// PC advances over INT3 then stops.
-				if Context.StepOverBreakpoint(wpid, uintptr(regs.Rip-1), &regs) {
+				if Context.StepOverBreakpoint(wpid, uintptr(Tracee.Regs.Rip-1), Tracee.Regs) {
 					// Breakpoint was found in the map
-					println("Stopped at breakpoint:", strconv.FormatUint(regs.Rip, 16))
+					println("Stopped at breakpoint:", strconv.FormatUint(Tracee.Regs.Rip, 16))
 
-					entry, _ := Context.LookForSymbolByName("main", dwarf.TagSubprogram)
+					entry, err := Context.LookForSymbolByPC(Tracee.Regs.Rip)
 
-					// Add call stack entry if it is a subprogram.
-					if entry.Tag == dwarf.TagSubprogram {
+					if err != nil {
+						println("No DWARF entry for current PC, skipping")
+					} else {
+						// Add call stack entry if it is a subprogram.
+						if entry.Tag == dwarf.TagSubprogram {
 
-						Context.CallStack.Push(entry, regs.Rbp)
+							Context.CallStack.Push(entry, Tracee.Regs.Rbp)
 
-						if entry != nil {
-							println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string))
+							if entry != nil {
+								println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string))
+							}
 						}
 					}
-
-					reader := bufio.NewReader(os.Stdin)
-					reader.ReadString('\n')
 				}
 
-				PrintRegisters(&regs)
+				PrintRegisters(Tracee.Regs)
+
+				Context.CurrentLine = symbol.LookForLineNo(Context, Tracee.Regs)
+
+				_, exists := Context.SystemBreakpoints[uintptr(Tracee.Regs.Rip-1)]
+
+				// System breakpoints do not give the user control
+				if exists {
+					syscall.PtraceCont(Tracee.Proc.Pid, 0)
+					continue
+				} else {
+					return
+				}
 			}
 		}
 	}
 }
 
-func debug(Context *symbol.DebugContext, Tracee *target.Tracee) {
-	syscall.PtraceCont(Tracee.Proc.Pid, 0)
+func StepOver(Context *symbol.DebugContext, Tracee *target.Tracee) {
+	// Special case for RETURN
+	opcode := symbol.PeekDataWrapper(Tracee.Proc.Pid, uintptr(Tracee.Regs.Rip), 1)
 
-	regs := syscall.PtraceRegs{}
-
-	for {
-		wpid, err := syscall.Wait4(Tracee.PGid*-1, &Tracee.Wstat, 0, nil)
-		ErrCheck(err)
-
-		if Tracee.Wstat.Exited() {
-			if Tracee.Proc.Pid == wpid {
-				break
-			}
-		} else {
-			// Debugger is currently stopped at a breakpoint or used single step.
-			if Tracee.Wstat.StopSignal() == syscall.SIGTRAP && Tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
-
-				syscall.PtraceGetRegs(wpid, &regs)
-
-				// Temporary, does not support stepping into other areas.
-				if regs.Rip < uint64(Context.TextareaBegin) || regs.Rip > uint64(Context.TextareaEnd) {
-					println("End of main()")
-					syscall.PtraceCont(wpid, 0)
-					runtime.UnlockOSThread()
-					break
-				}
-
-				// We have to substract 1 from PC to get the breakpoint address, since
-				// PC advances over INT3 then stops.
-				if Context.StepOverBreakpoint(wpid, uintptr(regs.Rip-1), &regs) {
-					// Breakpoint was found in the map
-					println("Stopped at breakpoint:", strconv.FormatUint(regs.Rip, 16))
-
-					entry, _ := Context.LookForSymbolByName("main", dwarf.TagSubprogram)
-
-					// Add call stack entry if it is a subprogram.
-					if entry.Tag == dwarf.TagSubprogram {
-
-						Context.CallStack.Push(entry, regs.Rbp)
-
-						if entry != nil {
-							println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string))
-						}
-					}
-
-					reader := bufio.NewReader(os.Stdin)
-					reader.ReadString('\n')
-				}
-
-				PrintRegisters(&regs)
-			}
-		}
-
-		println("\nCurrent stop signal: ", Tracee.Wstat.StopSignal().String())
-		reader := bufio.NewReader(os.Stdin)
-		reader.ReadString('\n')
-		PrintRegisters(&regs)
-		syscall.PtraceSingleStep(wpid)
-	}
-
-	println("Program exited.")
+	Context.SetBreakpoint(Tracee.Proc.Pid)
+	// swap contents of systembreakpoints with userbreakpoints?
 }
 
 // REFACTOR!

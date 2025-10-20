@@ -22,3 +22,15 @@ TODO:
     - gosym for go.
 
 - determine when a subprogram returns to pop from callstack
+
+- 
+
+make frontend functions
+- continue DONE
+- step over (can reuse continue)
+- step into (can reuse continue?)
+- step out of (can reuse continue?)
+- stop
+setting breakpoint action
+watch locals
+watch any

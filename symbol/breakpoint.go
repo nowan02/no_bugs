@@ -27,13 +27,18 @@ func PeekDataWrapper(pid int, address uintptr, length int) []byte {
 }
 
 // Sets breakpoint and saves replaced data to context
-func (Context *DebugContext) SetBreakpoint(pid int, address uintptr) {
+// systemcreated is false when user places a breakpoint
+func (Context *DebugContext) SetBreakpoint(pid int, address uintptr, systemcreated bool) {
 
 	original := PeekDataWrapper(pid, address, 1)
 
 	syscall.PtracePokeData(pid, address, []byte{0xCC})
 
-	Context.Breakpoints[address] = original
+	if systemcreated {
+		Context.SystemBreakpoints[address] = original
+	} else {
+		Context.UserBreakpoints[address] = original
+	}
 }
 
 // Replaces INT3, steps over then places the breakpoint back.
@@ -41,9 +46,10 @@ func (Context *DebugContext) SetBreakpoint(pid int, address uintptr) {
 // Returns true if breakpoint exists and was handled, false if the breakpoint does not exist
 func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, registers *syscall.PtraceRegs) bool {
 
-	data, exists := Context.Breakpoints[address]
+	data, exists := Context.SystemBreakpoints[address]
 
 	if exists {
+
 		syscall.PtracePokeData(pid, address, data)
 
 		// INT3 stops the program after its evaluation, set back PC with 1 byte after replacement to rerun the correct instruction.
@@ -56,20 +62,40 @@ func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, regist
 		syscall.PtraceGetRegs(pid, registers)
 
 		Context.SetBreakpoint(pid, address)
+
+		return exists
 	}
 
-	return exists
+	data, exists = Context.UserBreakpoints[address]
+
+	if exists {
+
+		syscall.PtracePokeData(pid, address, data)
+
+		// INT3 stops the program after its evaluation, set back PC with 1 byte after replacement to rerun the correct instruction.
+		registers.Rip -= 1
+
+		syscall.PtraceSetRegs(pid, registers)
+
+		syscall.PtraceSingleStep(pid)
+
+		syscall.PtraceGetRegs(pid, registers)
+
+		Context.SetBreakpoint(pid, address)
+
+		return exists
+	}
 }
 
 // Removes a breakpoint, only use it if the breakpoint was previously handled
 // by StepOverBreakpoint or was not hit at all.
 // Returns true if breakpoint exists and was handled, false if the breakpoint does not exist
 func (Context *DebugContext) RemoveBreakpoint(pid int, address uintptr, registers *syscall.PtraceRegs) bool {
-	data, exists := Context.Breakpoints[address]
+	data, exists := Context.SystemBreakpoints[address]
 	if exists {
 		syscall.PtracePokeData(pid, address, data)
 
-		delete(Context.Breakpoints, address)
+		delete(Context.SystemBreakpoints, address)
 	}
 	return exists
 }

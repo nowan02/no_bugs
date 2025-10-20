@@ -14,6 +14,7 @@ type Tracee struct {
 	Proc    *os.Process
 	PGid    int
 	Wstat   syscall.WaitStatus // no initial value!
+	Regs    *syscall.PtraceRegs
 }
 
 func _startProcess(name string, argv []string) (*os.Process, error) {
@@ -68,6 +69,7 @@ func Setup(name string, argv []string) *Tracee {
 		ElfPath: name,
 		Proc:    proc,
 		PGid:    pgid,
+		Regs:    &syscall.PtraceRegs{},
 	}
 
 	return &t

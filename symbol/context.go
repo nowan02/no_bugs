@@ -19,19 +19,19 @@ type DebugContext struct {
 	DwarfReader *dwarf.Reader
 
 	// Compilation unit line data
-	Lines map[*dwarf.Entry][]*dwarf.LineEntry
+	Lines []*dwarf.LineEntry
 
 	// Entries of followed symbols
 	FollowedSym []*dwarf.Entry
 
 	// Breakpoint offsets (key) and their replaced data (value)
-	Breakpoints map[uintptr][]byte
+	UserBreakpoints map[uintptr][]byte
+
+	// bps for system functions
+	SystemBreakpoints map[uintptr][]byte
 
 	// Entry point offset of the executable
 	Entrypoint uint64
-
-	// Current file path
-	CurrentFile string
 
 	// Current line on source code
 	CurrentLine int
@@ -63,7 +63,7 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 		Target:         Target,
 		DwarfReader:    reader,
 		SymbolTreeRoot: make([]*TreeLeaf, 0),
-		Lines:          make(map[*dwarf.Entry][]*dwarf.LineEntry),
+		Lines:          make([]*dwarf.LineEntry, 0),
 		FollowedSym:    make([]*dwarf.Entry, 0),
 		Breakpoints:    make(map[uintptr][]byte),
 		Entrypoint:     0,
@@ -71,10 +71,7 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 
 		TextareaBegin: 0,
 		TextareaEnd:   0,
-
-		CurrentFile:  "",
-		CurrentInstr: "",
-		CurrentLine:  0,
+		CurrentLine:   0,
 	}
 
 	ctx.SearchEntryPoint()
@@ -111,7 +108,8 @@ func (Context *DebugContext) InitializeLineData(DwarfInfo *dwarf.Data) error {
 				return err
 			}
 
-			Context.Lines[lvl1.Self] = append(Context.Lines[lvl1.Self], line)
+			Context.Lines = append(Context.Lines, line)
+
 		}
 	}
 
