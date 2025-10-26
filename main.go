@@ -1,12 +1,20 @@
 package main
 
+//#include <sys/ptrace.h>
+//#include <sys/types.h>
+//#include <sys/syscall.h>
+//#include <stdint.h>
+//unsigned long PtraceCont(int pid) {
+//	return ptrace(PTRACE_CONT, pid, NULL, 0);
+//}
+import "C"
+
 import (
 	"debug/dwarf"
 	"net/http"
 	"no_bugs/ssr"
 	"no_bugs/symbol"
 	"no_bugs/target"
-	"runtime"
 	"strconv"
 	"syscall"
 	"text/template"
@@ -58,20 +66,21 @@ func (dbgs *Session) Setup() {
 	// Place system breakpoint on all lines
 	/*for _, line := range dbgs.Context.Lines {
 		addr := dbgs.Context.TextareaBegin + line.Address
-		dbgs.Context.SetBreakpoint(dbgs.Tracee.Proc.Pid, uintptr(addr), true)
+		dbgs.Context.SetBreakpoint(dbgs.Tracee.Proc.Pid, uintptr(addr), false)
 	}*/
-
-	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), true)
+	dbgs.Context.SetBreakpoint(dbgs.Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+ctx.Entrypoint), false)
+	// WHAT?
 }
 
-func (dbgs *Session) Update() {
+func (dbgs Session) Update() {
 
 }
 
-func (dbgs *Session) Continue(SingleStep bool) {
-	err := syscall.PtraceCont(dbgs.Tracee.Proc.Pid, 0)
-	ErrCheck(err)
-	// Process disappears for some reason.
+func (dbgs Session) Continue(SingleStep bool) {
+	err := syscall.PtraceSingleStep(dbgs.Context.Target.Proc.Pid)
+	if err != nil {
+		return
+	}
 
 	for {
 		wpid, err := syscall.Wait4(dbgs.Tracee.PGid*-1, &dbgs.Tracee.Wstat, 0, nil)
@@ -88,16 +97,18 @@ func (dbgs *Session) Continue(SingleStep bool) {
 				syscall.PtraceGetRegs(wpid, dbgs.Tracee.Regs)
 
 				// Temporary, does not support stepping into other areas.
-				if dbgs.Tracee.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Tracee.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
+				/*if dbgs.Tracee.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Tracee.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
 					runtime.UnlockOSThread()
 					break
-				}
+				}*/
 
 				// We have to substract 1 from PC to get the breakpoint address, since
 				// PC advances over INT3 then stops.
-				if dbgs.Context.StepOverBreakpoint(wpid, uintptr(dbgs.Tracee.Regs.Rip-1), dbgs.Tracee.Regs) {
+				setbp, err := dbgs.Context.StepOverBreakpoint(wpid, uintptr(dbgs.Tracee.Regs.Rip-1), dbgs.Tracee.Regs)
+				ErrCheck(err)
+				if setbp {
 					// Breakpoint was found in the map
 					println("Stopped at breakpoint:", strconv.FormatUint(dbgs.Tracee.Regs.Rip, 16))
 
