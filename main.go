@@ -2,70 +2,93 @@ package main
 
 import (
 	"debug/dwarf"
+	"net/http"
+	"no_bugs/ssr"
 	"no_bugs/symbol"
 	"no_bugs/target"
 	"runtime"
 	"strconv"
 	"syscall"
+	"text/template"
 )
 
+type Session struct {
+	Context *symbol.DebugContext
+	Tracee  *target.Tracee
+	Lines   []ssr.Row
+}
+
 func main() {
+	var DebugSession Session
+
+	DebugSession.Setup()
+
+	tmpl := template.Must(template.ParseFiles("ssr/template.html"))
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		tmpl.Execute(w, DebugSession.Lines)
+		DebugSession.Update()
+	})
+
+	mux.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
+		DebugSession.Continue(false)
+		http.Redirect(w, r, "localhost:8080/", http.StatusTemporaryRedirect)
+	})
+
+	http.ListenAndServe(":8080", mux)
+}
+
+func (dbgs *Session) Setup() {
 	ExeName := "../bin/empty.out"
 
-	Tracee := target.Setup(ExeName, nil)
+	dbgs.Tracee = target.Setup(ExeName, nil)
 
-	ctx, err := symbol.InitContext(Tracee)
+	ctx, err := symbol.InitContext(dbgs.Tracee)
 	ErrCheck(err)
 
-	ctx.TextareaBegin, ctx.TextareaEnd = Tracee.FindTextareaLinux()
+	ctx.TextareaBegin, ctx.TextareaEnd = dbgs.Tracee.FindTextareaLinux()
 
-	ctx.SetBreakpoint(Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+ctx.Entrypoint), true)
+	dbgs.Context = ctx
 
-	debug(ctx, Tracee)
-}
-
-func serve() {
-
-}
-
-func Setup() (ctx *symbol.DebugContext, tracee *target.Tracee) {
-	ExeName := "../bin/empty.out"
-
-	Tracee := target.Setup(ExeName, nil)
-
-	ctx, err := symbol.InitContext(Tracee)
+	dbgs.Lines, err = ssr.ReadSourceFile("../bin/main.c")
 	ErrCheck(err)
 
-	// Place breakpoint on all subproram entries! Subprograms inside a comp unit are all on level 2 of the graph(?)
-	for _, lvl2 := range ctx.SymbolTreeRoot {
-		if lvl2.Self.Tag == dwarf.TagSubprogram {
-			ctx.SetBreakpoint(Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+uint64(lvl2.Self.Offset)), true)
-			// When base pointer value changes, we exited the subprogram.
-		}
-	}
+	// Place system breakpoint on all lines
+	/*for _, line := range dbgs.Context.Lines {
+		addr := dbgs.Context.TextareaBegin + line.Address
+		dbgs.Context.SetBreakpoint(dbgs.Tracee.Proc.Pid, uintptr(addr), true)
+	}*/
 
-	return ctx, Tracee
+	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), true)
 }
 
-func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
-	syscall.PtraceCont(Tracee.Proc.Pid, 0)
+func (dbgs *Session) Update() {
+
+}
+
+func (dbgs *Session) Continue(SingleStep bool) {
+	err := syscall.PtraceCont(dbgs.Tracee.Proc.Pid, 0)
+	ErrCheck(err)
+	// Process disappears for some reason.
 
 	for {
-		wpid, err := syscall.Wait4(Tracee.PGid*-1, &Tracee.Wstat, 0, nil)
+		wpid, err := syscall.Wait4(dbgs.Tracee.PGid*-1, &dbgs.Tracee.Wstat, 0, nil)
 		ErrCheck(err)
 
-		if Tracee.Wstat.Exited() {
-			if Tracee.Proc.Pid == wpid {
+		if dbgs.Tracee.Wstat.Exited() {
+			if dbgs.Tracee.Proc.Pid == wpid {
 				break
 			}
 		} else {
 			// Debugger is currently stopped at a breakpoint or used single step.
-			if Tracee.Wstat.StopSignal() == syscall.SIGTRAP && Tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
+			if dbgs.Tracee.Wstat.StopSignal() == syscall.SIGTRAP && dbgs.Tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
 
-				syscall.PtraceGetRegs(wpid, Tracee.Regs)
+				syscall.PtraceGetRegs(wpid, dbgs.Tracee.Regs)
 
 				// Temporary, does not support stepping into other areas.
-				if Tracee.Regs.Rip < uint64(Context.TextareaBegin) || Tracee.Regs.Rip > uint64(Context.TextareaEnd) {
+				if dbgs.Tracee.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Tracee.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
 					runtime.UnlockOSThread()
@@ -74,11 +97,11 @@ func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
 
 				// We have to substract 1 from PC to get the breakpoint address, since
 				// PC advances over INT3 then stops.
-				if Context.StepOverBreakpoint(wpid, uintptr(Tracee.Regs.Rip-1), Tracee.Regs) {
+				if dbgs.Context.StepOverBreakpoint(wpid, uintptr(dbgs.Tracee.Regs.Rip-1), dbgs.Tracee.Regs) {
 					// Breakpoint was found in the map
-					println("Stopped at breakpoint:", strconv.FormatUint(Tracee.Regs.Rip, 16))
+					println("Stopped at breakpoint:", strconv.FormatUint(dbgs.Tracee.Regs.Rip, 16))
 
-					entry, err := Context.LookForSymbolByPC(Tracee.Regs.Rip)
+					entry, err := dbgs.Context.LookForSymbolByPC(dbgs.Tracee.Regs.Rip)
 
 					if err != nil {
 						println("No DWARF entry for current PC, skipping")
@@ -86,24 +109,30 @@ func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
 						// Add call stack entry if it is a subprogram.
 						if entry.Tag == dwarf.TagSubprogram {
 
-							Context.CallStack.Push(entry, Tracee.Regs.Rbp)
+							dbgs.Context.CallStack.Push(entry, dbgs.Tracee.Regs.Rbp)
 
 							if entry != nil {
 								println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string))
 							}
 						}
 					}
+					// When base pointer value changes, we exited the subprogram.
+					if dbgs.Context.CallStack.Last().Rbp != dbgs.Tracee.Regs.Rbp && len(dbgs.Context.CallStack.Stack) > 0 {
+						dbgs.Context.CallStack.Pop()
+					}
 				}
 
-				PrintRegisters(Tracee.Regs)
+				PrintRegisters(dbgs.Tracee.Regs)
 
-				Context.CurrentLine = symbol.LookForLineNo(Context, Tracee.Regs)
+				dbgs.Context.CurrentLine = symbol.LookForLineNo(dbgs.Context, dbgs.Tracee.Regs)
 
-				_, exists := Context.SystemBreakpoints[uintptr(Tracee.Regs.Rip-1)]
+				_, exists := dbgs.Context.SystemBreakpoints[uintptr(dbgs.Tracee.Regs.Rip-1)]
 
-				// System breakpoints do not give the user control
-				if exists {
-					syscall.PtraceCont(Tracee.Proc.Pid, 0)
+				// System breakpoints do not give the user control,
+				// exception is when using step over.
+				if exists && !SingleStep {
+					err := syscall.PtraceCont(dbgs.Tracee.Proc.Pid, 0)
+					ErrCheck(err)
 					continue
 				} else {
 					return
@@ -111,14 +140,7 @@ func Continue(Context *symbol.DebugContext, Tracee *target.Tracee) {
 			}
 		}
 	}
-}
-
-func StepOver(Context *symbol.DebugContext, Tracee *target.Tracee) {
-	// Special case for RETURN
-	opcode := symbol.PeekDataWrapper(Tracee.Proc.Pid, uintptr(Tracee.Regs.Rip), 1)
-
-	Context.SetBreakpoint(Tracee.Proc.Pid)
-	// swap contents of systembreakpoints with userbreakpoints?
+	println("Program likely exited.")
 }
 
 // REFACTOR!

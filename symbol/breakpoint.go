@@ -61,7 +61,7 @@ func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, regist
 
 		syscall.PtraceGetRegs(pid, registers)
 
-		Context.SetBreakpoint(pid, address)
+		Context.SetBreakpoint(pid, address, true)
 
 		return exists
 	}
@@ -81,10 +81,12 @@ func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, regist
 
 		syscall.PtraceGetRegs(pid, registers)
 
-		Context.SetBreakpoint(pid, address)
+		Context.SetBreakpoint(pid, address, false)
 
 		return exists
 	}
+
+	return exists
 }
 
 // Removes a breakpoint, only use it if the breakpoint was previously handled
@@ -96,6 +98,17 @@ func (Context *DebugContext) RemoveBreakpoint(pid int, address uintptr, register
 		syscall.PtracePokeData(pid, address, data)
 
 		delete(Context.SystemBreakpoints, address)
+
+		return exists
+	}
+
+	data, exists = Context.UserBreakpoints[address]
+	if exists {
+		syscall.PtracePokeData(pid, address, data)
+
+		delete(Context.UserBreakpoints, address)
+
+		return exists
 	}
 	return exists
 }

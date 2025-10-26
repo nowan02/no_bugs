@@ -3,7 +3,6 @@ package symbol
 import (
 	"debug/dwarf"
 	"log"
-	"strconv"
 )
 
 // Leaves without parents are always Compilation Units.
@@ -62,7 +61,7 @@ func (Context *DebugContext) InitializeSymbolTree() {
 	}
 }
 
-func (Context *DebugContext) SeekNode(Name string) *Variable {
+/*func (Context *DebugContext) SeekNode(Name string) *Variable {
 	Context.DwarfReader.Seek(0)
 
 	for _, compunit := range Context.SymbolTreeRoot {
@@ -73,9 +72,9 @@ func (Context *DebugContext) SeekNode(Name string) *Variable {
 	}
 
 	return nil
-}
+}*/
 
-func (Context *DebugContext) seek(Name string, Parent *TreeLeaf) *Variable {
+/*func (Context *DebugContext) seek(Name string, Parent *TreeLeaf) *Variable {
 	var NewVar = &Variable{
 		Name:  Name,
 		Value: "Unknown",
@@ -112,4 +111,4 @@ func (Context *DebugContext) seek(Name string, Parent *TreeLeaf) *Variable {
 	}
 
 	return NewVar
-}
+}*/

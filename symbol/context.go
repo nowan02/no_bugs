@@ -60,14 +60,15 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 	reader := dwarfinfo.Reader()
 
 	var ctx = &DebugContext{
-		Target:         Target,
-		DwarfReader:    reader,
-		SymbolTreeRoot: make([]*TreeLeaf, 0),
-		Lines:          make([]*dwarf.LineEntry, 0),
-		FollowedSym:    make([]*dwarf.Entry, 0),
-		Breakpoints:    make(map[uintptr][]byte),
-		Entrypoint:     0,
-		CallStack:      *NewCallStack(),
+		Target:            Target,
+		DwarfReader:       reader,
+		SymbolTreeRoot:    make([]*TreeLeaf, 0),
+		Lines:             make([]*dwarf.LineEntry, 0),
+		FollowedSym:       make([]*dwarf.Entry, 0),
+		UserBreakpoints:   make(map[uintptr][]byte),
+		SystemBreakpoints: make(map[uintptr][]byte),
+		Entrypoint:        0,
+		CallStack:         *NewCallStack(),
 
 		TextareaBegin: 0,
 		TextareaEnd:   0,
@@ -141,12 +142,7 @@ func (ctx *DebugContext) SearchEntryPoint() {
 	}
 }
 
-func (ctx *DebugContext) PrintState() {
-	println("Breakpoints")
-	for _, bp := range ctx.Breakpoints {
-		println("\t", bp)
-	}
+// For step over operations, swaps system and user breakpoints
+func (ctx *DebugContext) SwapBreakpoints() {
 
-	println("Source file:")
-	println("\t", ctx.CurrentFile)
 }

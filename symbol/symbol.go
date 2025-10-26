@@ -108,5 +108,7 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int6
 		}
 
 		return uint64(binary.LittleEndian.Uint64(data)), nil
+	} else {
+		return 0, errors.New("unable to get bytes from memory location of this variable")
 	}
 }

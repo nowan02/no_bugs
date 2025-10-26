@@ -54,3 +54,7 @@ func (s *CallStack) Pop() {
 	}
 	s.Stack = s.Stack[:len(s.Stack)-1]
 }
+
+func (s *CallStack) Last() *CallStackEntry {
+	return s.Stack[len(s.Stack)-1]
+}
