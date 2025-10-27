@@ -59,7 +59,7 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 
 	reader := dwarfinfo.Reader()
 
-	var ctx = &DebugContext{
+	var ctx = DebugContext{
 		Target:            Target,
 		DwarfReader:       reader,
 		SymbolTreeRoot:    make([]*TreeLeaf, 0),
@@ -83,7 +83,7 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 		return nil, err
 	}
 
-	return ctx, nil
+	return &ctx, nil
 }
 
 func (Context *DebugContext) InitializeLineData(DwarfInfo *dwarf.Data) error {

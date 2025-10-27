@@ -4,7 +4,7 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"os"
-	"path/filepath"
+	"runtime"
 	"syscall"
 )
 
@@ -18,6 +18,7 @@ type Tracee struct {
 
 func _startProcess(name string, argv []string) (*os.Process, error) {
 
+	runtime.LockOSThread()
 	proc, err := os.StartProcess(name, argv, &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Sys: &syscall.SysProcAttr{
@@ -30,13 +31,13 @@ func _startProcess(name string, argv []string) (*os.Process, error) {
 		return nil, err
 	}
 
-	//state, err := proc.Wait()
+	state, err := proc.Wait()
 
-	/*if err != nil {
+	if err != nil {
 		return nil, err
-	}*/
+	}
 
-	println("Process no. ", proc.Pid, "has started.")
+	println("Process no. ", proc.Pid, "has started with state: ", state.String())
 
 	return proc, nil
 }
@@ -49,12 +50,6 @@ func Setup(name string, argv []string) *Tracee {
 	}
 
 	pgid, err := syscall.Getpgid(proc.Pid)
-
-	if err != nil {
-		panic(err)
-	}
-
-	name, err = filepath.Abs(name)
 
 	if err != nil {
 		panic(err)
