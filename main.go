@@ -21,8 +21,8 @@ import (
 )
 
 type Session struct {
-	Context *symbol.DebugContext
-	Tracee  *target.Tracee
+	Context symbol.DebugContext
+	Tracee  target.Tracee
 	Lines   []ssr.Row
 }
 
@@ -51,14 +51,14 @@ func main() {
 func (dbgs *Session) Setup() {
 	ExeName := "../bin/empty.out"
 
-	dbgs.Tracee = target.Setup(ExeName, nil)
+	dbgs.Tracee = *target.Setup(ExeName, nil)
 
-	ctx, err := symbol.InitContext(dbgs.Tracee)
+	ctx, err := symbol.InitContext(&dbgs.Tracee)
 	ErrCheck(err)
 
 	ctx.TextareaBegin, ctx.TextareaEnd = dbgs.Tracee.FindTextareaLinux()
 
-	dbgs.Context = ctx
+	dbgs.Context = *ctx
 
 	dbgs.Lines, err = ssr.ReadSourceFile("../bin/main.c")
 	ErrCheck(err)
@@ -72,12 +72,12 @@ func (dbgs *Session) Setup() {
 	// WHAT?
 }
 
-func (dbgs Session) Update() {
+func (dbgs *Session) Update() {
 
 }
 
-func (dbgs Session) Continue(SingleStep bool) {
-	err := syscall.PtraceSingleStep(dbgs.Context.Target.Proc.Pid)
+func (dbgs *Session) Continue(SingleStep bool) {
+	err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
 	if err != nil {
 		return
 	}
@@ -135,7 +135,7 @@ func (dbgs Session) Continue(SingleStep bool) {
 
 				PrintRegisters(dbgs.Tracee.Regs)
 
-				dbgs.Context.CurrentLine = symbol.LookForLineNo(dbgs.Context, dbgs.Tracee.Regs)
+				dbgs.Context.CurrentLine = symbol.LookForLineNo(&dbgs.Context, dbgs.Tracee.Regs)
 
 				_, exists := dbgs.Context.SystemBreakpoints[uintptr(dbgs.Tracee.Regs.Rip-1)]
 
