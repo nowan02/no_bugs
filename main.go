@@ -28,6 +28,8 @@ type Session struct {
 }
 
 func main() {
+	runtime.LockOSThread()
+
 	var DebugSession Session
 	DebugSession.Setup()
 
@@ -44,7 +46,8 @@ func main() {
 	})
 
 	mux.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
-		DebugSession.Continue(false)
+		DebugSession.Continue(true)
+		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 	})
 
@@ -67,6 +70,9 @@ func main() {
 			DebugSession.Lines[lineno].Breakpoint = true
 			DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
 		}
+
+		w.Header().Add("Content-Type", "")
+		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
 	})
 
 	http.ListenAndServe(":8080", mux)
@@ -92,6 +98,8 @@ func (dbgs *Session) Setup() {
 		dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(addr), false)
 	}*/
 	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
+
+	dbgs.Continue(false)
 }
 
 func (dbgs Session) SetUserBreakpoint() {
@@ -102,7 +110,6 @@ func (dbgs Session) Update() {
 
 }
 
-// próbáltam pointerként is igen.
 func (dbgs Session) Continue(SingleStep bool) {
 	err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
 	ErrCheck(err)
@@ -125,7 +132,6 @@ func (dbgs Session) Continue(SingleStep bool) {
 				if dbgs.Context.Target.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Context.Target.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
 					println("End of main()")
 					syscall.PtraceCont(wpid, 0)
-					runtime.UnlockOSThread()
 					break
 				}
 
@@ -176,6 +182,7 @@ func (dbgs Session) Continue(SingleStep bool) {
 			}
 		}
 	}
+	runtime.UnlockOSThread()
 	println("Program likely exited.")
 }
 

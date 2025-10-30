@@ -38,7 +38,7 @@ func ReadSourceFile(filepath string) ([]Row, error) {
 		}
 
 		text = append(text, newRow)
-		n = n + 1
+		n++
 	}
 
 	text[0].Current = true

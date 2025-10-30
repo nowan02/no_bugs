@@ -4,7 +4,6 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"os"
-	"runtime"
 	"syscall"
 )
 
@@ -17,8 +16,6 @@ type Tracee struct {
 }
 
 func _startProcess(name string, argv []string) (*os.Process, error) {
-
-	runtime.LockOSThread()
 	proc, err := os.StartProcess(name, argv, &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Sys: &syscall.SysProcAttr{
@@ -64,7 +61,6 @@ func Setup(name string, argv []string) *Tracee {
 		PGid:    pgid,
 		Regs:    &syscall.PtraceRegs{},
 	}
-
 	return &t
 }
 

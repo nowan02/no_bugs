@@ -35,9 +35,9 @@
                     {{range .}}
                             <div class="row-container">
                                 {{if .Breakpoint}}
-                                <a class="set-break" href="http://localhost:8080/breakpoint?line={{.Num}}">{{.Num}}.</a>
+                                <a class="set-break" href="http://localhost:8080/breakpoint?line={{.Num}}">   {{.Num}}.   </a>
                                 {{else}}
-                                <a class="unset-break" href="http://localhost:8080/breakpoint?line={{.Num}}">{{.Num}}.</a>
+                                <a class="unset-break" href="http://localhost:8080/breakpoint?line={{.Num}}">   {{.Num}}.   </a>
                                 {{end}}
                                 {{if .Current}}
                                 <p class="code"  style="background-color:orange;color: black;">{{.Text}}</p>
