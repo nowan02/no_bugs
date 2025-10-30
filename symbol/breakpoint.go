@@ -56,27 +56,21 @@ func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, regist
 
 		syscall.PtracePokeData(pid, address, data)
 
-		// INT3 stops the program after its evaluation, set back PC with 1 byte after replacement to rerun the correct instruction.
+		// INT3 stops the program after its evaluation,
+		// set back PC with 1 byte after replacement to rerun the correct instruction.
 		registers.Rip -= 1
-
 		err := syscall.PtraceSetRegs(pid, registers)
-
 		if err != nil {
 			return false, err
 		}
-
 		err = syscall.PtraceSingleStep(pid)
-
 		if err != nil {
 			return false, err
 		}
-
 		err = syscall.PtraceGetRegs(pid, registers)
-
 		if err != nil {
 			return false, err
 		}
-
 		Context.SetBreakpoint(pid, address, true)
 
 		return exists, nil
@@ -120,7 +114,7 @@ func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, regist
 // Removes a breakpoint, only use it if the breakpoint was previously handled
 // by StepOverBreakpoint or was not hit at all.
 // Returns true if breakpoint exists and was handled, false if the breakpoint does not exist
-func (Context *DebugContext) RemoveBreakpoint(pid int, address uintptr, registers *syscall.PtraceRegs) (bool, error) {
+func (Context *DebugContext) RemoveBreakpoint(pid int, address uintptr) (bool, error) {
 	data, exists := Context.SystemBreakpoints[address]
 	if exists {
 		_, err := syscall.PtracePokeData(pid, address, data)

@@ -3,55 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="template.css">
+    <link rel="stylesheet" href="/public/style.css">
     <title>no_bugs</title>
 </head>
 <body>
-    <div class="column-container">
-        <!--Control-->
-        <div>
-            <div class="row-container">
-                <div>
-                    <h4 href="http://localhost:8080/continue">Continue</h4>
+    <div class="row-container">
+        <div class="column-container"></
+            <!--Control-->
+            <div class="column-container">
+                <div class="row-container">
+                    <div class="row-container">
+                        <div>
+                            <a href="http://localhost:8080/continue">Continue</a>
+                        </div>
+                        <div>
+                            <a href="http://localhost:8080/stepover">Step Over</a>
+                        </div>
+                        <div>
+                            <a href="http://localhost:8080/stepinto">Step Into</a>
+                        </div>
+                        <div>
+                            <a href="http://localhost:8080/stepoutof">Step Out Of</a>
+                        </div>
+                        <div>
+                            <a href="http://localhost:8080/stop">Stop</a>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <h4 href="http://localhost:8080/stepover">Step Over</h4>
-                </div>
-                <div>
-                    <h4 href="http://localhost:8080/stepinto">Step Into</h4>
-                </div>
-                <div>
-                    <h4 href="http://localhost:8080/stepoutof">Step Out Of</h4>
-                </div>
-                <div>
-                    <h4 href="http://localhost:8080/stop">Stop</h4>
-                </div>
-            </div>
-            <!--Source Code-->
-            <div>
-                <ol>
+                <!--Source Code-->
+                <div class="row-container">
                     {{range .}}
-                        {{if .Current}}
-                            <li class="code" style="background-color:orange;color: black;">{{.Text}}</li>
-                        {{else}}
-                            <li class="code">{{.Text}}</li>
-                        {{end}}
+                            <div class="row-container">
+                                {{if .Breakpoint}}
+                                <a class="set-break" href="http://localhost:8080/breakpoint?line={{.Num}}">{{.Num}}.</a>
+                                {{else}}
+                                <a class="unset-break" href="http://localhost:8080/breakpoint?line={{.Num}}">{{.Num}}.</a>
+                                {{end}}
+                                {{if .Current}}
+                                <p class="code"  style="background-color:orange;color: black;">{{.Text}}</p>
+                                {{else}}
+                                <li class="code"> {{.Text}}</li>
+                                {{end}}
+                            </div>
                     {{end}}
-                </ol>
+                </div>
             </div>
         </div>
         <div class="column-container">
-            <!--Locals-->
-            <div>
-                
-            </div>
-            <!--Watch-->
-            <div>
-                
-            </div>
-            <!--Help-->
-            <div>
-                
+            <div class="row-container">
+                <!--Locals-->
+                <div>
+                    
+                </div >
+                <!--Watch-->
+                <div>
+                    
+                </div>
+                <!--Help-->
+                <div>
+                    
+                </div>
             </div>
         </div>
     </div>

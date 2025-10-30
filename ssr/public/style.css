@@ -1,5 +1,5 @@
 div {
-    border-width: 1px;
+    border-width: 2px;
     border-color: crimson;
     border-style: dashed;
 }
@@ -20,4 +20,16 @@ div {
 .column-container > div {
     flex-direction: column;
     margin: 10px;
+}
+
+.set-break {
+    border-color: red;
+    border-style: double;
+    border-width: 2px;
+}
+
+.unset-break {
+    border-color: green;
+    border-style: double;
+    border-width: 2px;
 }

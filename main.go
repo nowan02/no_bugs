@@ -1,14 +1,5 @@
 package main
 
-//#include <sys/ptrace.h>
-//#include <sys/types.h>
-//#include <sys/syscall.h>
-//#include <stdint.h>
-//unsigned long PtraceCont(int pid) {
-//	return ptrace(PTRACE_CONT, pid, NULL, 0);
-//}
-import "C"
-
 import (
 	"debug/dwarf"
 	"net/http"
@@ -28,10 +19,7 @@ type Session struct {
 }
 
 func main() {
-	DebugSession := Session{
-		Context: &symbol.DebugContext{},
-		Lines:   make([]ssr.Row, 0),
-	}
+	var DebugSession Session
 
 	DebugSession.Setup()
 
@@ -39,13 +27,42 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	fs := http.FileServer(http.Dir("ssr/public"))
+	mux.Handle("/public/", http.StripPrefix("/public/", fs))
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl.Execute(w, DebugSession.Lines)
-		DebugSession.Update()
 	})
 
 	mux.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
 		DebugSession.Continue(false)
+		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+	})
+
+	mux.HandleFunc("/breakpoint", func(w http.ResponseWriter, r *http.Request) {
+		line := r.URL.Query().Get("line")
+
+		lineno, err := strconv.Atoi(line)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		LineAddress := uintptr(DebugSession.Context.TextareaBegin + DebugSession.Context.Lines[lineno].Address)
+
+		if DebugSession.Lines[lineno].Breakpoint {
+			DebugSession.Lines[lineno].Breakpoint = false
+			_, err = DebugSession.Context.RemoveBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress)
+
+		} else {
+			DebugSession.Lines[lineno].Breakpoint = true
+			err = DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
+		}
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 	})
 
@@ -72,10 +89,6 @@ func (dbgs *Session) Setup() {
 		dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(addr), false)
 	}*/
 	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
-}
-
-func (dbgs *Session) Update() {
-
 }
 
 func (dbgs *Session) Continue(SingleStep bool) {

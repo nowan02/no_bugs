@@ -2,15 +2,21 @@ package ssr
 
 import (
 	"bufio"
+	"html"
 	"os"
 )
 
 type Row struct {
-	Current bool
-	Text    string
+	Current    bool
+	Breakpoint bool
+	Text       string
+	Num        int
 }
 
 func ReadSourceFile(filepath string) ([]Row, error) {
+
+	n := 0
+
 	text := make([]Row, 0)
 
 	file, err := os.Open(filepath)
@@ -25,11 +31,14 @@ func ReadSourceFile(filepath string) ([]Row, error) {
 
 	for scanner.Scan() {
 		newRow := Row{
-			Current: false,
-			Text:    scanner.Text(),
+			Current:    false,
+			Text:       html.EscapeString(scanner.Text()),
+			Num:        n,
+			Breakpoint: false,
 		}
 
 		text = append(text, newRow)
+		n = n + 1
 	}
 
 	text[0].Current = true
