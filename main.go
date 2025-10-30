@@ -28,11 +28,7 @@ type Session struct {
 }
 
 func main() {
-	DebugSession := Session{
-		Context: &symbol.DebugContext{},
-		Lines:   make([]ssr.Row, 0),
-	}
-
+	var DebugSession Session
 	DebugSession.Setup()
 
 	tmpl := template.Must(template.ParseFiles("ssr/template.html"))
@@ -62,11 +58,15 @@ func main() {
 			return
 		}
 
-		DebugSession.Lines[lineno].Breakpoint = true
-
 		LineAddress := uintptr(DebugSession.Context.TextareaBegin + DebugSession.Context.Lines[lineno].Address)
 
-		DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
+		if DebugSession.Lines[lineno].Breakpoint {
+			DebugSession.Lines[lineno].Breakpoint = false
+			DebugSession.Context.RemoveBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress)
+		} else {
+			DebugSession.Lines[lineno].Breakpoint = true
+			DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
+		}
 	})
 
 	http.ListenAndServe(":8080", mux)
@@ -94,15 +94,16 @@ func (dbgs *Session) Setup() {
 	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
 }
 
-func (dbgs *Session) SetUserBreakpoint() {
+func (dbgs Session) SetUserBreakpoint() {
 
 }
 
-func (dbgs *Session) Update() {
+func (dbgs Session) Update() {
 
 }
 
-func (dbgs *Session) Continue(SingleStep bool) {
+// próbáltam pointerként is igen.
+func (dbgs Session) Continue(SingleStep bool) {
 	err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
 	ErrCheck(err)
 
