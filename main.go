@@ -1,5 +1,14 @@
 package main
 
+//#include <sys/ptrace.h>
+//#include <sys/types.h>
+//#include <sys/syscall.h>
+//#include <stdint.h>
+//unsigned long PtraceCont(int pid) {
+//	return ptrace(PTRACE_CONT, pid, NULL, 0);
+//}
+import "C"
+
 import (
 	"debug/dwarf"
 	"net/http"
@@ -19,7 +28,10 @@ type Session struct {
 }
 
 func main() {
-	var DebugSession Session
+	DebugSession := Session{
+		Context: &symbol.DebugContext{},
+		Lines:   make([]ssr.Row, 0),
+	}
 
 	DebugSession.Setup()
 
@@ -32,6 +44,7 @@ func main() {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl.Execute(w, DebugSession.Lines)
+		DebugSession.Update()
 	})
 
 	mux.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
@@ -46,24 +59,14 @@ func main() {
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
+
+		DebugSession.Lines[lineno].Breakpoint = true
 
 		LineAddress := uintptr(DebugSession.Context.TextareaBegin + DebugSession.Context.Lines[lineno].Address)
 
-		if DebugSession.Lines[lineno].Breakpoint {
-			DebugSession.Lines[lineno].Breakpoint = false
-			_, err = DebugSession.Context.RemoveBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress)
-
-		} else {
-			DebugSession.Lines[lineno].Breakpoint = true
-			err = DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
-		}
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-
-		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+		DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
 	})
 
 	http.ListenAndServe(":8080", mux)
@@ -89,6 +92,14 @@ func (dbgs *Session) Setup() {
 		dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(addr), false)
 	}*/
 	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
+}
+
+func (dbgs *Session) SetUserBreakpoint() {
+
+}
+
+func (dbgs *Session) Update() {
+
 }
 
 func (dbgs *Session) Continue(SingleStep bool) {
@@ -148,7 +159,7 @@ func (dbgs *Session) Continue(SingleStep bool) {
 
 				PrintRegisters(dbgs.Context.Target.Regs)
 
-				dbgs.Context.CurrentLine = symbol.LookForLineNo(dbgs.Context, dbgs.Context.Target.Regs)
+				dbgs.Context.LookForLineNo()
 
 				_, exists := dbgs.Context.SystemBreakpoints[uintptr(dbgs.Context.Target.Regs.Rip-1)]
 
