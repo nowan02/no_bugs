@@ -4,8 +4,8 @@ package symbol
 //#include <sys/types.h>
 //#include <sys/syscall.h>
 //#include <stdint.h>
-//unsigned long PeekData(int pid, uint64_t rip) {
-//	return ptrace(PTRACE_PEEKDATA, pid, rip, NULL);
+//unsigned long PeekData(int Pid, uint64_t rip) {
+//	return ptrace(PTRACE_PEEKDATA, Pid, rip, NULL);
 //}
 import "C"
 
@@ -13,13 +13,13 @@ import (
 	"syscall"
 )
 
-// Wrapper for C function
+// Wrapper for C function, go's implementation is broken
 // Read n bytes of data from location
-func PeekDataWrapper(pid int, address uintptr, length int) []byte {
+func (Context *DebugContext) _peekDataWrapper(address uintptr, length int) []byte {
 	data := make([]byte, length)
 
 	for i := 0; i < length; i++ {
-		data[i] = byte(C.PeekData(C.int(pid), C.uint64_t(address)))
+		data[i] = byte(C.PeekData(C.int(Context.Target.Proc.Pid), C.uint64_t(address)))
 		address++
 	}
 
@@ -28,11 +28,11 @@ func PeekDataWrapper(pid int, address uintptr, length int) []byte {
 
 // Sets breakpoint and saves replaced data to context
 // systemcreated is false when user places a breakpoint
-func (Context *DebugContext) SetBreakpoint(pid int, address uintptr, systemcreated bool) error {
+func (Context *DebugContext) SetBreakpoint(address uintptr, systemcreated bool) error {
 
-	original := PeekDataWrapper(pid, address, 1)
+	original := Context._peekDataWrapper(address, 1)
 
-	_, err := syscall.PtracePokeData(pid, address, []byte{0xCC})
+	_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, []byte{0xCC})
 	if err != nil {
 		return err
 	}
@@ -48,62 +48,61 @@ func (Context *DebugContext) SetBreakpoint(pid int, address uintptr, systemcreat
 // Replaces INT3, steps over then places the breakpoint back.
 // Use this to handle a breakpoint you currently stopped at.
 // Returns true if breakpoint exists and was handled, false if the breakpoint does not exist
-func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, registers *syscall.PtraceRegs) (bool, error) {
+func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 
-	data, exists := Context.SystemBreakpoints[address]
+	data, exists := Context.SystemBreakpoints[uintptr(Context.Target.Regs.Rip-1)]
 
 	if exists {
 
-		syscall.PtracePokeData(pid, address, data)
+		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, uintptr(Context.Target.Regs.Rip-1), data)
+		if err != nil {
+			return false, err
+		}
+		println("Ptrace poke")
 
 		// INT3 stops the program after its evaluation,
 		// set back PC with 1 byte after replacement to rerun the correct instruction.
-		registers.Rip -= 1
-		err := syscall.PtraceSetRegs(pid, registers)
+		Context.Target.Regs.Rip -= 1
+		err = syscall.PtraceSetRegs(Context.Target.Proc.Pid, Context.Target.Regs)
+		println("Ptrace Setregs")
 		if err != nil {
 			return false, err
 		}
-		err = syscall.PtraceSingleStep(pid)
+		err = syscall.PtraceSingleStep(Context.Target.Proc.Pid)
+		println("Ptrace Singlestep")
 		if err != nil {
 			return false, err
 		}
-		err = syscall.PtraceGetRegs(pid, registers)
-		if err != nil {
-			return false, err
-		}
-		Context.SetBreakpoint(pid, address, true)
+		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip-1), true)
+		println("Setbp")
 
 		return exists, nil
 	}
 
-	data, exists = Context.UserBreakpoints[address]
+	data, exists = Context.UserBreakpoints[uintptr(Context.Target.Regs.Rip-1)]
 
 	if exists {
 
-		_, err := syscall.PtracePokeData(pid, address, data)
+		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, uintptr(Context.Target.Regs.Rip-1), data)
 		if err != nil {
 			return false, err
 		}
+		println("Ptrace Poke")
 
 		// INT3 stops the program after its evaluation, set back PC with 1 byte after replacement to rerun the correct instruction.
-		registers.Rip -= 1
-
-		err = syscall.PtraceSetRegs(pid, registers)
+		Context.Target.Regs.Rip -= 1
+		err = syscall.PtraceSetRegs(Context.Target.Proc.Pid, Context.Target.Regs)
+		println("Ptrace Setregs")
 		if err != nil {
 			return false, err
 		}
-
-		err = syscall.PtraceSingleStep(pid)
+		err = syscall.PtraceSingleStep(Context.Target.Proc.Pid)
+		println("Ptrace Singlestep")
 		if err != nil {
 			return false, err
 		}
-
-		err = syscall.PtraceGetRegs(pid, registers)
-		if err != nil {
-			return false, err
-		}
-
-		Context.SetBreakpoint(pid, address, false)
+		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip-1), false)
+		println("Setbp")
 
 		return exists, nil
 	}
@@ -114,10 +113,10 @@ func (Context *DebugContext) StepOverBreakpoint(pid int, address uintptr, regist
 // Removes a breakpoint, only use it if the breakpoint was previously handled
 // by StepOverBreakpoint or was not hit at all.
 // Returns true if breakpoint exists and was handled, false if the breakpoint does not exist
-func (Context *DebugContext) RemoveBreakpoint(pid int, address uintptr) (bool, error) {
+func (Context *DebugContext) RemoveBreakpoint(address uintptr) (bool, error) {
 	data, exists := Context.SystemBreakpoints[address]
 	if exists {
-		_, err := syscall.PtracePokeData(pid, address, data)
+		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, data)
 		if err != nil {
 			return false, err
 		}
@@ -129,7 +128,7 @@ func (Context *DebugContext) RemoveBreakpoint(pid int, address uintptr) (bool, e
 
 	data, exists = Context.UserBreakpoints[address]
 	if exists {
-		_, err := syscall.PtracePokeData(pid, address, data)
+		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, data)
 		if err != nil {
 			return false, err
 		}

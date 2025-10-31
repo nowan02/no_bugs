@@ -23,35 +23,41 @@ import (
 )
 
 type Session struct {
-	Context *symbol.DebugContext
-	Lines   []ssr.Row
+	Context   *symbol.DebugContext
+	Lines     []ssr.Row
+	isRunning bool
 }
 
 func main() {
-	runtime.LockOSThread()
-
 	var DebugSession Session
-	DebugSession.Setup()
+	DebugSession.isRunning = false
 
 	tmpl := template.Must(template.ParseFiles("ssr/template.html"))
 
-	mux := http.NewServeMux()
-
 	fs := http.FileServer(http.Dir("ssr/public"))
-	mux.Handle("/public/", http.StripPrefix("/public/", fs))
+	http.Handle("/public/", http.StripPrefix("/public/", fs))
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl.Execute(w, DebugSession.Lines)
 		DebugSession.Update()
 	})
 
-	mux.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			runtime.LockOSThread()
+			DebugSession.Setup()
+		}
+		w.Header().Add("Content-Type", "")
+		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+	})
+
+	http.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
 		DebugSession.Continue(true)
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 	})
 
-	mux.HandleFunc("/breakpoint", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/breakpoint", func(w http.ResponseWriter, r *http.Request) {
 		line := r.URL.Query().Get("line")
 
 		lineno, err := strconv.Atoi(line)
@@ -65,17 +71,17 @@ func main() {
 
 		if DebugSession.Lines[lineno].Breakpoint {
 			DebugSession.Lines[lineno].Breakpoint = false
-			DebugSession.Context.RemoveBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress)
+			DebugSession.Context.RemoveBreakpoint(LineAddress)
 		} else {
 			DebugSession.Lines[lineno].Breakpoint = true
-			DebugSession.Context.SetBreakpoint(DebugSession.Context.Target.Proc.Pid, LineAddress, false)
+			DebugSession.Context.SetBreakpoint(LineAddress, false)
 		}
 
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
 	})
 
-	http.ListenAndServe(":8080", mux)
+	http.ListenAndServe(":8080", nil)
 }
 
 func (dbgs *Session) Setup() {
@@ -97,13 +103,10 @@ func (dbgs *Session) Setup() {
 		addr := dbgs.Context.TextareaBegin + line.Address
 		dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(addr), false)
 	}*/
-	dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
 
-	dbgs.Continue(false)
-}
+	dbgs.Context.SetBreakpoint(uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
 
-func (dbgs Session) SetUserBreakpoint() {
-
+	dbgs.isRunning = true
 }
 
 func (dbgs Session) Update() {
@@ -127,6 +130,7 @@ func (dbgs Session) Continue(SingleStep bool) {
 			if dbgs.Context.Target.Wstat.StopSignal() == syscall.SIGTRAP && dbgs.Context.Target.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
 
 				syscall.PtraceGetRegs(wpid, dbgs.Context.Target.Regs)
+				syscall.PtraceGetRegs(wpid, dbgs.Context.Target.Regs)
 
 				// Temporary, does not support stepping into other areas.
 				if dbgs.Context.Target.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Context.Target.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
@@ -137,13 +141,14 @@ func (dbgs Session) Continue(SingleStep bool) {
 
 				// We have to substract 1 from PC to get the breakpoint address, since
 				// PC advances over INT3 then stops.
-				setbp, err := dbgs.Context.StepOverBreakpoint(wpid, uintptr(dbgs.Context.Target.Regs.Rip-1), dbgs.Context.Target.Regs)
+				setbp, err := dbgs.Context.StepOverBreakpoint()
+				println("Stepover")
 				ErrCheck(err)
 				if setbp {
 					// Breakpoint was found in the map
 					println("Stopped at breakpoint:", strconv.FormatUint(dbgs.Context.Target.Regs.Rip, 16))
 
-					entry, err := dbgs.Context.LookForSymbolByPC(dbgs.Context.Target.Regs.Rip)
+					entry, err := dbgs.Context.LookForSymbolByPC()
 
 					if err != nil {
 						println("No DWARF entry for current PC, skipping")
