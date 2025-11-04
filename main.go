@@ -99,11 +99,12 @@ func (dbgs *Session) Setup() {
 	ErrCheck(err)
 
 	// Place system breakpoint on all lines
-	/*for _, line := range dbgs.Context.Lines {
+	for _, line := range dbgs.Context.Lines {
 		addr := dbgs.Context.TextareaBegin + line.Address
-		dbgs.Context.SetBreakpoint(dbgs.Context.Target.Proc.Pid, uintptr(addr), false)
-	}*/
+		dbgs.Context.SetBreakpoint(uintptr(addr), false)
+	}
 
+	// User breakpoint on the entry main()
 	dbgs.Context.SetBreakpoint(uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
 
 	dbgs.isRunning = true
@@ -129,7 +130,6 @@ func (dbgs Session) Continue(SingleStep bool) {
 			// Debugger is currently stopped at a breakpoint or used single step.
 			if dbgs.Context.Target.Wstat.StopSignal() == syscall.SIGTRAP && dbgs.Context.Target.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
 
-				syscall.PtraceGetRegs(wpid, dbgs.Context.Target.Regs)
 				syscall.PtraceGetRegs(wpid, dbgs.Context.Target.Regs)
 
 				// Temporary, does not support stepping into other areas.
@@ -163,8 +163,9 @@ func (dbgs Session) Continue(SingleStep bool) {
 							}
 						}
 					}
-					// When base pointer value changes, we exited the subprogram.
-					if dbgs.Context.CallStack.Last().Rbp != dbgs.Context.Target.Regs.Rbp && len(dbgs.Context.CallStack.Stack) > 0 {
+
+					// When base pointer value changes, and the current rbp is an entry in the callstack, we exited the subprogram.
+					if dbgs.Context.CallStack.Last().ReturnAddress != dbgs.Context.Target.Regs.Rip && dbgs.Context.CallStack.ContainsAddress(dbgs.Context.Target.Regs.Rip) {
 						dbgs.Context.CallStack.Pop()
 					}
 				}
@@ -189,6 +190,35 @@ func (dbgs Session) Continue(SingleStep bool) {
 	}
 	runtime.UnlockOSThread()
 	println("Program likely exited.")
+}
+
+func (dbgs Session) StepInto() bool {
+	l_stack := len(dbgs.Context.CallStack.Stack)
+
+	dbgs.Continue(true)
+
+	// Lenght of the stack increased, which means step into was successful.
+	if l_stack < len(dbgs.Context.CallStack.Stack) {
+		return true
+		// If not, the debugger performed a single step
+	} else {
+		return false
+	}
+
+}
+
+func (dbgs Session) StepOutOf() bool {
+	l_stack := len(dbgs.Context.CallStack.Stack)
+
+	dbgs.Continue(false)
+
+	// Lenght of the stack increased, which means step into was successful.
+	if l_stack > len(dbgs.Context.CallStack.Stack) {
+		return true
+		// If not, the debugger performed a single step
+	} else {
+		return false
+	}
 }
 
 // REFACTOR!

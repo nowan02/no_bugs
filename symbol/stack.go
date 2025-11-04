@@ -2,6 +2,7 @@ package symbol
 
 import (
 	"debug/dwarf"
+	"encoding/binary"
 )
 
 // Stores the subprogram information and its base from where local vars can be calculated.
@@ -10,7 +11,7 @@ type CallStackEntry struct {
 	Self *dwarf.Entry
 
 	// Saved Stack Base Pointer
-	Rbp uint64
+	ReturnAddress uint64
 }
 
 // Stack storage
@@ -36,12 +37,22 @@ func (s *CallStack) Contains(Name string) bool {
 	return false
 }
 
+// Check if an entry with such a base address is already in the stack.
+func (s *CallStack) ContainsAddress(Address uint64) bool {
+	for _, entry := range s.Stack {
+		if entry.ReturnAddress == Address {
+			return true
+		}
+	}
+	return false
+}
+
 // Push Subprogram entry
-func (s *CallStack) Push(Symbol *dwarf.Entry, Rbp uint64) {
+func (s *CallStack) Push(Symbol *dwarf.Entry, ReturnAddress uint64) {
 
 	var NewEntry = &CallStackEntry{
-		Self: Symbol,
-		Rbp:  Rbp,
+		Self:          Symbol,
+		ReturnAddress: ReturnAddress,
 	}
 
 	s.Stack = append(s.Stack, NewEntry)
@@ -57,4 +68,10 @@ func (s *CallStack) Pop() {
 
 func (s *CallStack) Last() *CallStackEntry {
 	return s.Stack[len(s.Stack)-1]
+}
+
+func (Context *DebugContext) GetCurrentReturnAddress() uint64 {
+	data := Context._peekDataWrapper(uintptr(Context.Target.Regs.Rbp+8), 8)
+
+	return binary.LittleEndian.Uint64(data)
 }

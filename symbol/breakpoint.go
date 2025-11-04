@@ -73,6 +73,10 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
+		Context.Target.Regs.Rip += 1
+		println("Increase Rip to original increment.")
+
 		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip-1), true)
 		println("Setbp")
 
@@ -101,6 +105,10 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
+		Context.Target.Regs.Rip += 1
+		println("Increase Rip to original increment.")
+
 		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip-1), false)
 		println("Setbp")
 
