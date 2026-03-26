@@ -13,11 +13,11 @@ type Row struct {
 	Num        int
 }
 
-func ReadSourceFile(filepath string) ([]Row, error) {
+func ReadSourceFile(filepath string) ([]*Row, error) {
 
-	n := 0
+	n := 1
 
-	text := make([]Row, 0)
+	text := make([]*Row, 0)
 
 	file, err := os.Open(filepath)
 
@@ -30,7 +30,7 @@ func ReadSourceFile(filepath string) ([]Row, error) {
 	scanner.Split(bufio.ScanLines)
 
 	for scanner.Scan() {
-		newRow := Row{
+		newRow := &Row{
 			Current:    false,
 			Text:       html.EscapeString(scanner.Text()),
 			Num:        n,
@@ -40,8 +40,6 @@ func ReadSourceFile(filepath string) ([]Row, error) {
 		text = append(text, newRow)
 		n++
 	}
-
-	text[0].Current = true
 
 	return text, nil
 }

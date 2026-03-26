@@ -10,7 +10,6 @@ package main
 import "C"
 
 import (
-	"debug/dwarf"
 	"net/http"
 	"no_bugs/ssr"
 	"no_bugs/symbol"
@@ -18,41 +17,47 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"syscall"
 	"text/template"
 )
 
 type Session struct {
 	Context   *symbol.DebugContext
-	Lines     []ssr.Row
+	Lines     []*ssr.Row
 	isRunning bool
 }
 
+type Command struct {
+	cmd  string
+	arg1 interface{}
+}
+
 func main() {
+	runtime.LockOSThread()
 	var DebugSession Session
 	DebugSession.isRunning = false
 
-	tmpl := template.Must(template.ParseFiles("ssr/template.html"))
+	commandChannel := make(chan Command, 1)
+	errorChannel := make(chan error, 1)
 
 	fs := http.FileServer(http.Dir("ssr/public"))
 	http.Handle("/public/", http.StripPrefix("/public/", fs))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl.Execute(w, DebugSession.Lines)
 		DebugSession.Update()
+		tmpl := template.Must(template.ParseFiles("ssr/template.html"))
+		tmpl.Execute(w, DebugSession.Lines)
 	})
 
 	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			runtime.LockOSThread()
-			DebugSession.Setup()
+			go DebugSession.Setup()
 		}
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 	})
 
 	http.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
-		DebugSession.Continue(true)
+		DebugSession.Continue(false)
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 	})
@@ -69,11 +74,12 @@ func main() {
 
 		LineAddress := uintptr(DebugSession.Context.TextareaBegin + DebugSession.Context.Lines[lineno].Address)
 
-		if DebugSession.Lines[lineno].Breakpoint {
-			DebugSession.Lines[lineno].Breakpoint = false
+		// refactor, every line already has a breakpoint...
+		if DebugSession.Lines[lineno-1].Breakpoint {
+			DebugSession.Lines[lineno-1].Breakpoint = false
 			DebugSession.Context.RemoveBreakpoint(LineAddress)
 		} else {
-			DebugSession.Lines[lineno].Breakpoint = true
+			DebugSession.Lines[lineno-1].Breakpoint = true
 			DebugSession.Context.SetBreakpoint(LineAddress, false)
 		}
 
@@ -84,7 +90,7 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func (dbgs *Session) Setup() {
+func (dbgs *Session) Setup(commandChannel chan Command, errorChannel chan<- error) {
 	ExeName, err := filepath.Abs("../bin/empty.out")
 	ErrCheck(err)
 
@@ -101,123 +107,22 @@ func (dbgs *Session) Setup() {
 	// Place system breakpoint on all lines
 	for _, line := range dbgs.Context.Lines {
 		addr := dbgs.Context.TextareaBegin + line.Address
-		dbgs.Context.SetBreakpoint(uintptr(addr), false)
+		if addr != dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint {
+			dbgs.Context.SetBreakpoint(uintptr(addr), true)
+		}
 	}
 
 	// User breakpoint on the entry main()
 	dbgs.Context.SetBreakpoint(uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
 
 	dbgs.isRunning = true
-}
-
-func (dbgs Session) Update() {
-
-}
-
-func (dbgs Session) Continue(SingleStep bool) {
-	err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
-	ErrCheck(err)
 
 	for {
-		wpid, err := syscall.Wait4(dbgs.Context.Target.PGid*-1, &dbgs.Context.Target.Wstat, 0, nil)
-		ErrCheck(err)
+		select {
+		case cmd := <-commandChannel:
+			HandleCommand(cmd)
 
-		if dbgs.Context.Target.Wstat.Exited() {
-			if dbgs.Context.Target.Proc.Pid == wpid {
-				break
-			}
-		} else {
-			// Debugger is currently stopped at a breakpoint or used single step.
-			if dbgs.Context.Target.Wstat.StopSignal() == syscall.SIGTRAP && dbgs.Context.Target.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
-
-				syscall.PtraceGetRegs(wpid, dbgs.Context.Target.Regs)
-
-				// Temporary, does not support stepping into other areas.
-				if dbgs.Context.Target.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Context.Target.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
-					println("End of main()")
-					syscall.PtraceCont(wpid, 0)
-					break
-				}
-
-				// We have to substract 1 from PC to get the breakpoint address, since
-				// PC advances over INT3 then stops.
-				setbp, err := dbgs.Context.StepOverBreakpoint()
-				println("Stepover")
-				ErrCheck(err)
-				if setbp {
-					// Breakpoint was found in the map
-					println("Stopped at breakpoint:", strconv.FormatUint(dbgs.Context.Target.Regs.Rip, 16))
-
-					entry, err := dbgs.Context.LookForSymbolByPC()
-
-					if err != nil {
-						println("No DWARF entry for current PC, skipping")
-					} else {
-						// Add call stack entry if it is a subprogram.
-						if entry.Tag == dwarf.TagSubprogram {
-
-							dbgs.Context.CallStack.Push(entry, dbgs.Context.Target.Regs.Rbp)
-
-							if entry != nil {
-								println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string))
-							}
-						}
-					}
-
-					// When base pointer value changes, and the current rbp is an entry in the callstack, we exited the subprogram.
-					if dbgs.Context.CallStack.Last().ReturnAddress != dbgs.Context.Target.Regs.Rip && dbgs.Context.CallStack.ContainsAddress(dbgs.Context.Target.Regs.Rip) {
-						dbgs.Context.CallStack.Pop()
-					}
-				}
-
-				PrintRegisters(dbgs.Context.Target.Regs)
-
-				dbgs.Context.LookForLineNo()
-
-				_, exists := dbgs.Context.SystemBreakpoints[uintptr(dbgs.Context.Target.Regs.Rip-1)]
-
-				// System breakpoints do not give the user control,
-				// exception is when using step over.
-				if exists && !SingleStep {
-					err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
-					ErrCheck(err)
-					continue
-				} else {
-					return
-				}
-			}
 		}
-	}
-	runtime.UnlockOSThread()
-	println("Program likely exited.")
-}
-
-func (dbgs Session) StepInto() bool {
-	l_stack := len(dbgs.Context.CallStack.Stack)
-
-	dbgs.Continue(true)
-
-	// Lenght of the stack increased, which means step into was successful.
-	if l_stack < len(dbgs.Context.CallStack.Stack) {
-		return true
-		// If not, the debugger performed a single step
-	} else {
-		return false
-	}
-
-}
-
-func (dbgs Session) StepOutOf() bool {
-	l_stack := len(dbgs.Context.CallStack.Stack)
-
-	dbgs.Continue(false)
-
-	// Lenght of the stack increased, which means step into was successful.
-	if l_stack > len(dbgs.Context.CallStack.Stack) {
-		return true
-		// If not, the debugger performed a single step
-	} else {
-		return false
 	}
 }
 

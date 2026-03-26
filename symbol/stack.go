@@ -71,7 +71,7 @@ func (s *CallStack) Last() *CallStackEntry {
 }
 
 func (Context *DebugContext) GetCurrentReturnAddress() uint64 {
-	data := Context._peekDataWrapper(uintptr(Context.Target.Regs.Rbp+8), 8)
+	data := Context.PeekDataWrapper(uintptr(Context.Target.Regs.Rbp-8), 8)
 
 	return binary.LittleEndian.Uint64(data)
 }

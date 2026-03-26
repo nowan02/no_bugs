@@ -37,7 +37,7 @@ func (Context *DebugContext) LookForSymbolByName(SymbolName string, SymbolType d
 // account for that case.
 func (Context *DebugContext) LookForSymbolByPC() (*dwarf.Entry, error) {
 
-	offset := Context.Target.Regs.Rip - Context.TextareaBegin - 1
+	offset := Context.Target.Regs.Rip - Context.TextareaBegin
 
 	Context.DwarfReader.Seek(0)
 
@@ -100,11 +100,11 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int6
 		case 0x03:
 			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes))
 			address := Context.TextareaBegin + uint64(offset_val)
-			data = Context._peekDataWrapper(uintptr(address), 8)
+			data = Context.PeekDataWrapper(uintptr(address), 8)
 		// Local offset
 		case 0x91:
 			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes)) - 128 + 16
-			data = Context._peekDataWrapper(uintptr(StackBase+offset_val), 8)
+			data = Context.PeekDataWrapper(uintptr(StackBase+offset_val), 8)
 		default:
 			return 0, errors.New("location data was not in the expected format ([]byte)")
 		}

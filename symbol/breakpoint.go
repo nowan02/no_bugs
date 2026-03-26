@@ -15,7 +15,7 @@ import (
 
 // Wrapper for C function, go's implementation is broken
 // Read n bytes of data from location
-func (Context *DebugContext) _peekDataWrapper(address uintptr, length int) []byte {
+func (Context *DebugContext) PeekDataWrapper(address uintptr, length int) []byte {
 	data := make([]byte, length)
 
 	for i := 0; i < length; i++ {
@@ -30,7 +30,7 @@ func (Context *DebugContext) _peekDataWrapper(address uintptr, length int) []byt
 // systemcreated is false when user places a breakpoint
 func (Context *DebugContext) SetBreakpoint(address uintptr, systemcreated bool) error {
 
-	original := Context._peekDataWrapper(address, 1)
+	original := Context.PeekDataWrapper(address, 1)
 
 	_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, []byte{0xCC})
 	if err != nil {
@@ -74,10 +74,10 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 			return false, err
 		}
 
-		Context.Target.Regs.Rip += 1
-		println("Increase Rip to original increment.")
+		//Context.Target.Regs.Rip += 1
+		//println("Increase Rip to original increment.")
 
-		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip-1), true)
+		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip), true)
 		println("Setbp")
 
 		return exists, nil
@@ -106,10 +106,10 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 			return false, err
 		}
 
-		Context.Target.Regs.Rip += 1
-		println("Increase Rip to original increment.")
+		//Context.Target.Regs.Rip += 1
+		//println("Increase Rip to original increment.")
 
-		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip-1), false)
+		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip), false)
 		println("Setbp")
 
 		return exists, nil
