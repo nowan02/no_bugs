@@ -7,18 +7,21 @@ import (
 	"syscall"
 )
 
-func HandleCommand(cmd Command) {
+func HandleCommand(cmd Command, debugSession Session) {
 	switch cmd.cmd {
 	case "continue":
+		debugSession.Continue(false)
 		break
 	case "singlestep":
+		debugSession.Continue(true)
 		break
 	case "stepinto":
+		debugSession.StepInto()
 		break
 	case "stepoutof":
+		debugSession.StepOutOf()
 		break
 	case "stop":
-
 	}
 }
 
@@ -100,6 +103,7 @@ func (dbgs *Session) Continue(SingleStep bool) {
 				// If stopped at user bp, or single step, hand back control
 				if exists && !SingleStep {
 					dbgs.Context.LookForLineNo()
+					dbgs.Update()
 					return
 				} else {
 					err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)

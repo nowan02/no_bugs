@@ -50,7 +50,7 @@ func main() {
 
 	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			go DebugSession.Setup()
+			go DebugSession.Setup(commandChannel, errorChannel, DebugSession)
 		}
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
@@ -90,7 +90,7 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func (dbgs *Session) Setup(commandChannel chan Command, errorChannel chan<- error) {
+func (dbgs *Session) Setup(commandChannel chan Command, errorChannel chan<- error, debugSession Session) {
 	ExeName, err := filepath.Abs("../bin/empty.out")
 	ErrCheck(err)
 
@@ -120,7 +120,7 @@ func (dbgs *Session) Setup(commandChannel chan Command, errorChannel chan<- erro
 	for {
 		select {
 		case cmd := <-commandChannel:
-			HandleCommand(cmd)
+			HandleCommand(cmd, debugSession)
 
 		}
 	}
