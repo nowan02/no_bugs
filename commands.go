@@ -85,7 +85,6 @@ func (dbgs *Session) Continue(SingleStep bool) {
 				// If stopped at user bp, or single step, hand back control
 				if exists && !SingleStep {
 					dbgs.Context.LookForLineNo()
-					dbgs.Update()
 					return
 				} else {
 					err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
@@ -135,9 +134,20 @@ func (dbgs Session) BreakOnLine(lineno int) {
 	// refactor, every line already has a breakpoint...
 	if dbgs.Lines[lineno-1].Breakpoint {
 		dbgs.Lines[lineno-1].Breakpoint = false
-		dbgs.Context.RemoveBreakpoint(LineAddress)
+		exists, err := dbgs.Context.RemoveBreakpoint(LineAddress)
+		if err != nil {
+			dbgs.logger.Fatalln("Error occured: ", err.Error())
+		}
+
+		if exists {
+			dbgs.logger.Println("Breakpoint has been removed.")
+		} else {
+			dbgs.logger.Fatalln("Breakpoint didn't exist but was removed anyway.")
+		}
+
 	} else {
 		dbgs.Lines[lineno-1].Breakpoint = true
 		dbgs.Context.SetBreakpoint(LineAddress, false)
+		dbgs.logger.Println("Breakpoint was set on line ", lineno, ".")
 	}
 }

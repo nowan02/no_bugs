@@ -10,10 +10,12 @@ package main
 import "C"
 
 import (
+	"log"
 	"net/http"
 	"no_bugs/ssr"
 	"no_bugs/symbol"
 	"no_bugs/target"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -24,6 +26,7 @@ type Session struct {
 	Context   *symbol.DebugContext
 	Lines     []*ssr.Row
 	isRunning bool
+	logger    *log.Logger
 }
 
 type Command struct {
@@ -31,24 +34,44 @@ type Command struct {
 	arg1 interface{}
 }
 
+func await(ret chan bool, log *log.Logger) {
+	for {
+		select {
+		case result := <-ret:
+			if result {
+				log.Println("Command ran successfully.")
+				return
+			} else {
+				log.Println("Command ran with error.")
+				return
+			}
+		}
+	}
+}
+
 func main() {
 	runtime.LockOSThread()
 	var DebugSession Session
 	DebugSession.isRunning = false
+	DebugSession.logger = log.New(os.Stdout, "Session:", log.LstdFlags)
 
 	commandChannel := make(chan Command, 1)
+	awaitChannel := make(chan bool, 1)
 
 	fs := http.FileServer(http.Dir("ssr/public"))
 	http.Handle("/public/", http.StripPrefix("/public/", fs))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		DebugSession.logger.Println("Updating UI...")
 		DebugSession.Update()
+		DebugSession.logger.Println("Update successful, executing template.")
 		tmpl := template.Must(template.ParseFiles("ssr/template.html"))
 		tmpl.Execute(w, DebugSession.Lines)
 	})
 
 	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Starting tracee...")
 			go DebugSession.Setup(commandChannel, DebugSession)
 		}
 		w.Header().Add("Content-Type", "")
@@ -56,7 +79,17 @@ func main() {
 	})
 
 	http.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
-		DebugSession.Continue(false)
+		DebugSession.logger.Println("Continue until next breakpoint if exists.")
+		cmd := &Command{
+			cmd:  "continue",
+			arg1: nil,
+		}
+
+		DebugSession.logger.Println("Command sent, awaiting result...")
+		await(awaitChannel, DebugSession.logger)
+
+		commandChannel <- *cmd
+
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 	})
@@ -71,7 +104,16 @@ func main() {
 			return
 		}
 
-		DebugSession.BreakOnLine(lineno)
+		cmd := &Command{
+			cmd:  "breakonline",
+			arg1: lineno,
+		}
+
+		DebugSession.logger.Println("Sending command...")
+		commandChannel <- *cmd
+
+		DebugSession.logger.Println("Command sent. Awaiting result...")
+		await(awaitChannel, DebugSession.logger)
 
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
@@ -122,6 +164,9 @@ func (dbgs *Session) Setup(commandChannel chan Command, debugSession Session) {
 			case "breakpoint":
 				debugSession.BreakOnLine(cmd.arg1.(int))
 			case "stop":
+				debugSession.Context.Detach()
+				debugSession.logger.Println("Debugger detached, handing back control to OS.")
+				os.Exit(0)
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"no_bugs/target"
+	"syscall"
 )
 
 // Implementation of symbolic layer
@@ -140,6 +141,10 @@ func (ctx *DebugContext) SearchEntryPoint() {
 	} else {
 		panic(errors.New("entrypoint had unexpected type (not uint64)"))
 	}
+}
+
+func (ctx *DebugContext) Detach() {
+	syscall.PtraceDetach(ctx.Target.Proc.Pid)
 }
 
 // For step over operations, swaps system and user breakpoints

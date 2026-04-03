@@ -114,3 +114,19 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int6
 		return 0, errors.New("unable to get bytes from memory location of this variable")
 	}
 }
+
+func (Context *DebugContext) getVariableType(Entry *dwarf.Entry) (vartype *dwarf.Entry, err error) {
+	data := Entry.AttrField(dwarf.AttrType).Val
+	if data == nil {
+		return nil, errors.New("dwarf Symbol does not contain type attribute")
+	}
+
+	DW_AT_type, ok := data.(dwarf.Offset)
+
+	if ok {
+		vartype, err := Context.LookForSymbolByDWARFOffset(DW_AT_type)
+		if err != nil {
+			return nil, err
+		}
+	}
+}
