@@ -7,24 +7,6 @@ import (
 	"syscall"
 )
 
-func HandleCommand(cmd Command, debugSession Session) {
-	switch cmd.cmd {
-	case "continue":
-		debugSession.Continue(false)
-		break
-	case "singlestep":
-		debugSession.Continue(true)
-		break
-	case "stepinto":
-		debugSession.StepInto()
-		break
-	case "stepoutof":
-		debugSession.StepOutOf()
-		break
-	case "stop":
-	}
-}
-
 func (dbgs Session) Update() {
 	for _, line := range dbgs.Lines {
 		if line.Num == dbgs.Context.CurrentLine {
@@ -144,5 +126,18 @@ func (dbgs Session) StepOutOf() bool {
 		// If not, the debugger performed a single step
 	} else {
 		return false
+	}
+}
+
+func (dbgs Session) BreakOnLine(lineno int) {
+	LineAddress := uintptr(dbgs.Context.TextareaBegin + dbgs.Context.Lines[lineno].Address)
+
+	// refactor, every line already has a breakpoint...
+	if dbgs.Lines[lineno-1].Breakpoint {
+		dbgs.Lines[lineno-1].Breakpoint = false
+		dbgs.Context.RemoveBreakpoint(LineAddress)
+	} else {
+		dbgs.Lines[lineno-1].Breakpoint = true
+		dbgs.Context.SetBreakpoint(LineAddress, false)
 	}
 }

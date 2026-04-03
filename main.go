@@ -37,7 +37,6 @@ func main() {
 	DebugSession.isRunning = false
 
 	commandChannel := make(chan Command, 1)
-	errorChannel := make(chan error, 1)
 
 	fs := http.FileServer(http.Dir("ssr/public"))
 	http.Handle("/public/", http.StripPrefix("/public/", fs))
@@ -50,7 +49,7 @@ func main() {
 
 	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			go DebugSession.Setup(commandChannel, errorChannel, DebugSession)
+			go DebugSession.Setup(commandChannel, DebugSession)
 		}
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
@@ -72,16 +71,7 @@ func main() {
 			return
 		}
 
-		LineAddress := uintptr(DebugSession.Context.TextareaBegin + DebugSession.Context.Lines[lineno].Address)
-
-		// refactor, every line already has a breakpoint...
-		if DebugSession.Lines[lineno-1].Breakpoint {
-			DebugSession.Lines[lineno-1].Breakpoint = false
-			DebugSession.Context.RemoveBreakpoint(LineAddress)
-		} else {
-			DebugSession.Lines[lineno-1].Breakpoint = true
-			DebugSession.Context.SetBreakpoint(LineAddress, false)
-		}
+		DebugSession.BreakOnLine(lineno)
 
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
@@ -90,7 +80,7 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func (dbgs *Session) Setup(commandChannel chan Command, errorChannel chan<- error, debugSession Session) {
+func (dbgs *Session) Setup(commandChannel chan Command, debugSession Session) {
 	ExeName, err := filepath.Abs("../bin/empty.out")
 	ErrCheck(err)
 
@@ -120,8 +110,19 @@ func (dbgs *Session) Setup(commandChannel chan Command, errorChannel chan<- erro
 	for {
 		select {
 		case cmd := <-commandChannel:
-			HandleCommand(cmd, debugSession)
-
+			switch cmd.cmd {
+			case "continue":
+				debugSession.Continue(false)
+			case "singlestep":
+				debugSession.Continue(true)
+			case "stepinto":
+				debugSession.StepInto()
+			case "stepoutof":
+				debugSession.StepOutOf()
+			case "breakpoint":
+				debugSession.BreakOnLine(cmd.arg1.(int))
+			case "stop":
+			}
 		}
 	}
 }
