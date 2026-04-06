@@ -36,15 +36,13 @@ type Command struct {
 
 func await(ret chan bool, log *log.Logger) {
 	for {
-		select {
-		case result := <-ret:
-			if result {
-				log.Println("Command ran successfully.")
-				return
-			} else {
-				log.Println("Command ran with error.")
-				return
-			}
+		result := <-ret
+		if result {
+			log.Println("Command ran successfully.")
+			return
+		} else {
+			log.Println("Command ran with error.")
+			return
 		}
 	}
 }
@@ -56,14 +54,14 @@ func main() {
 	DebugSession.logger = log.New(os.Stdout, "Session:", log.LstdFlags)
 
 	commandChannel := make(chan Command, 1)
-	awaitChannel := make(chan bool, 1)
+	resultChannel := make(chan bool, 1)
 
 	fs := http.FileServer(http.Dir("ssr/public"))
 	http.Handle("/public/", http.StripPrefix("/public/", fs))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		DebugSession.logger.Println("Updating UI...")
-		DebugSession.Update()
+		DebugSession.Update(resultChannel)
 		DebugSession.logger.Println("Update successful, executing template.")
 		tmpl := template.Must(template.ParseFiles("ssr/template.html"))
 		tmpl.Execute(w, DebugSession.Lines)
@@ -72,7 +70,7 @@ func main() {
 	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
 			DebugSession.logger.Println("Starting tracee...")
-			go DebugSession.Setup(commandChannel, DebugSession)
+			go DebugSession.Setup(commandChannel, resultChannel)
 		}
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
@@ -85,10 +83,11 @@ func main() {
 			arg1: nil,
 		}
 
-		DebugSession.logger.Println("Command sent, awaiting result...")
-		await(awaitChannel, DebugSession.logger)
-
+		DebugSession.logger.Println("Command sent...")
 		commandChannel <- *cmd
+
+		DebugSession.logger.Println("Awaiting result.")
+		await(resultChannel, DebugSession.logger)
 
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
@@ -105,7 +104,7 @@ func main() {
 		}
 
 		cmd := &Command{
-			cmd:  "breakonline",
+			cmd:  "breakpoint",
 			arg1: lineno,
 		}
 
@@ -113,7 +112,7 @@ func main() {
 		commandChannel <- *cmd
 
 		DebugSession.logger.Println("Command sent. Awaiting result...")
-		await(awaitChannel, DebugSession.logger)
+		await(resultChannel, DebugSession.logger)
 
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
@@ -122,7 +121,7 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func (dbgs *Session) Setup(commandChannel chan Command, debugSession Session) {
+func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool) {
 	ExeName, err := filepath.Abs("../bin/empty.out")
 	ErrCheck(err)
 
@@ -150,24 +149,31 @@ func (dbgs *Session) Setup(commandChannel chan Command, debugSession Session) {
 	dbgs.isRunning = true
 
 	for {
-		select {
-		case cmd := <-commandChannel:
-			switch cmd.cmd {
-			case "continue":
-				debugSession.Continue(false)
-			case "singlestep":
-				debugSession.Continue(true)
-			case "stepinto":
-				debugSession.StepInto()
-			case "stepoutof":
-				debugSession.StepOutOf()
-			case "breakpoint":
-				debugSession.BreakOnLine(cmd.arg1.(int))
-			case "stop":
-				debugSession.Context.Detach()
-				debugSession.logger.Println("Debugger detached, handing back control to OS.")
-				os.Exit(0)
+		cmd := <-commandChannel
+		dbgs.logger.Println("Command received.")
+		switch cmd.cmd {
+		case "continue":
+			dbgs.Continue(false, resultChannel)
+		case "singlestep":
+			dbgs.Continue(true, resultChannel)
+		case "stepinto":
+			dbgs.StepInto(resultChannel)
+		case "stepoutof":
+			dbgs.StepOutOf(resultChannel)
+		case "breakpoint":
+			lineno, ok := cmd.arg1.(int)
+			if ok {
+				dbgs.BreakOnLine(lineno, resultChannel)
+			} else {
+				dbgs.logger.Fatalln("ERROR: first argument for this command was not an integer.")
 			}
+		case "stop":
+			dbgs.Context.Detach()
+			dbgs.logger.Println("Debugger detached, handing back control to OS.")
+			os.Exit(0)
+		default:
+			dbgs.logger.Println("Invalid command.")
+			continue
 		}
 	}
 }

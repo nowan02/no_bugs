@@ -115,7 +115,7 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int6
 	}
 }
 
-func (Context *DebugContext) getVariableType(Entry *dwarf.Entry) (vartype *dwarf.Entry, err error) {
+func (Context *DebugContext) getVariableType(Entry *dwarf.Entry) (vartype *dwarf.Field, err error) {
 	data := Entry.AttrField(dwarf.AttrType).Val
 	if data == nil {
 		return nil, errors.New("dwarf Symbol does not contain type attribute")
@@ -128,5 +128,8 @@ func (Context *DebugContext) getVariableType(Entry *dwarf.Entry) (vartype *dwarf
 		if err != nil {
 			return nil, err
 		}
+		return vartype.AttrField(dwarf.AttrName), nil
+	} else {
+		return nil, errors.New("Unexpected conversion error -> DW_AT_type offset could not be converted to type dwarf.Offset.")
 	}
 }
