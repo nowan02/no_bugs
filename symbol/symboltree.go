@@ -50,15 +50,17 @@ func InitNodes(Reader *dwarf.Reader, Parent *TreeLeaf) *TreeLeaf {
 	return Leaf
 }
 
-func (Context *DebugContext) InitializeSymbolTree() {
-	Context.DwarfReader.Seek(0)
+func (ctx *DebugContext) InitializeSymbolTree() {
+	ctx.Logger.Println("Initializing symbol graph.")
+	ctx.DwarfReader.Seek(0)
 	for {
-		CompUnit := InitNodes(Context.DwarfReader, nil)
+		CompUnit := InitNodes(ctx.DwarfReader, nil)
 		if CompUnit == nil {
 			break
 		}
-		Context.SymbolTreeRoot = append(Context.SymbolTreeRoot, CompUnit)
+		ctx.SymbolTreeRoot = append(ctx.SymbolTreeRoot, CompUnit)
 	}
+	ctx.Logger.Println("Symbol graph created.")
 }
 
 /*func (Context *DebugContext) SeekNode(Name string) *Variable {

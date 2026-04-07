@@ -10,6 +10,7 @@ package symbol
 import "C"
 
 import (
+	"slices"
 	"syscall"
 )
 
@@ -30,17 +31,17 @@ func (Context *DebugContext) PeekDataWrapper(address uintptr, length int) []byte
 // systemcreated is false when user places a breakpoint
 func (Context *DebugContext) SetBreakpoint(address uintptr, systemcreated bool) error {
 
-	original := Context.PeekDataWrapper(address, 1)
-
-	_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, []byte{0xCC})
-	if err != nil {
-		return err
-	}
-
 	if systemcreated {
+		original := Context.PeekDataWrapper(address, 1)
+
+		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, []byte{0xCC})
+		if err != nil {
+			return err
+		}
+
 		Context.SystemBreakpoints[address] = original
 	} else {
-		Context.UserBreakpoints[address] = original
+		Context.UserBreakpoints = append(Context.UserBreakpoints, address)
 	}
 	return nil
 }
@@ -68,6 +69,7 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
 		err = syscall.PtraceSingleStep(Context.Target.Proc.Pid)
 		println("Ptrace Singlestep")
 		if err != nil {
@@ -78,35 +80,6 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 		//println("Increase Rip to original increment.")
 
 		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip), true)
-
-		return exists, nil
-	}
-
-	data, exists = Context.UserBreakpoints[uintptr(Context.Target.Regs.Rip-1)]
-
-	if exists {
-
-		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, uintptr(Context.Target.Regs.Rip-1), data)
-		if err != nil {
-			return false, err
-		}
-		println("Ptrace Poke")
-
-		// INT3 stops the program after its evaluation, set back PC with 1 byte after replacement to rerun the correct instruction.
-		Context.Target.Regs.Rip -= 1
-		err = syscall.PtraceSetRegs(Context.Target.Proc.Pid, Context.Target.Regs)
-		if err != nil {
-			return false, err
-		}
-		err = syscall.PtraceSingleStep(Context.Target.Proc.Pid)
-		if err != nil {
-			return false, err
-		}
-
-		//Context.Target.Regs.Rip += 1
-		//println("Increase Rip to original increment.")
-
-		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip), false)
 
 		return exists, nil
 	}
@@ -125,21 +98,12 @@ func (Context *DebugContext) RemoveBreakpoint(address uintptr) (bool, error) {
 			return false, err
 		}
 
-		delete(Context.SystemBreakpoints, address)
-
-		return exists, nil
-	}
-
-	data, exists = Context.UserBreakpoints[address]
-	if exists {
-		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, data)
-		if err != nil {
-			return false, err
+		if slices.Contains(Context.UserBreakpoints, address) {
+			index := slices.Index(Context.UserBreakpoints, address)
+			Context.UserBreakpoints = slices.Delete(Context.UserBreakpoints, index, index)
+		} else {
+			delete(Context.SystemBreakpoints, address)
 		}
-
-		delete(Context.UserBreakpoints, address)
-
-		return exists, nil
 	}
 	return exists, nil
 }

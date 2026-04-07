@@ -48,10 +48,9 @@ func await(ret chan bool, log *log.Logger) {
 }
 
 func main() {
-	runtime.LockOSThread()
 	var DebugSession Session
 	DebugSession.isRunning = false
-	DebugSession.logger = log.New(os.Stdout, "Session:", log.LstdFlags)
+	DebugSession.logger = log.New(os.Stdout, "GUI: ", log.LstdFlags)
 
 	commandChannel := make(chan Command, 1)
 	resultChannel := make(chan bool, 1)
@@ -122,6 +121,7 @@ func main() {
 }
 
 func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool) {
+	runtime.LockOSThread()
 	ExeName, err := filepath.Abs("../bin/empty.out")
 	ErrCheck(err)
 
@@ -138,13 +138,14 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool)
 	// Place system breakpoint on all lines
 	for _, line := range dbgs.Context.Lines {
 		addr := dbgs.Context.TextareaBegin + line.Address
-		if addr != dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint {
-			dbgs.Context.SetBreakpoint(uintptr(addr), true)
-		}
+		dbgs.Context.SetBreakpoint(uintptr(addr), true)
 	}
 
 	// User breakpoint on the entry main()
 	dbgs.Context.SetBreakpoint(uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
+
+	dbgs.Continue(false, resultChannel)
+	await(resultChannel, dbgs.logger)
 
 	dbgs.isRunning = true
 
@@ -167,6 +168,8 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool)
 			} else {
 				dbgs.logger.Fatalln("ERROR: first argument for this command was not an integer.")
 			}
+		case "stepover":
+			dbgs.StepOver()
 		case "stop":
 			dbgs.Context.Detach()
 			dbgs.logger.Println("Debugger detached, handing back control to OS.")
