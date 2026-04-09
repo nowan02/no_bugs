@@ -33,8 +33,9 @@ func (Context *DebugContext) LookForSymbolByName(SymbolName string, SymbolType d
 	return nil, nil
 }
 
-// Should be used when stopped at a breakpoint! It subtracts one from the current Rip to take
-// account for that case.
+// Should be used when stopped at a breakpoint!
+// Returns the entry which has the same address offset as the current PC value.
+// If a function starts at this address, it returns its entry.
 func (Context *DebugContext) LookForSymbolByPC() (*dwarf.Entry, error) {
 
 	offset := Context.Target.Regs.Rip - Context.TextareaBegin

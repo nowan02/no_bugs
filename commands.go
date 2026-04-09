@@ -48,8 +48,8 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 				// Only the main textarea is supported, stepping into library functions is not.
 				if dbgs.Context.Target.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Context.Target.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
 					dbgs.Context.Logger.Println("End of main(), let the program exit gracefully.")
-					syscall.PtraceCont(wpid, 0)
-					break
+					dbgs.Context.Detach()
+					return
 				}
 
 				// We have to substract 1 from PC to get the breakpoint address, since
@@ -150,7 +150,12 @@ func (dbgs Session) StepOver() {
 }
 
 func (dbgs Session) BreakOnLine(lineno int, result chan bool) {
-	LineAddress := uintptr(dbgs.Context.TextareaBegin + dbgs.Context.Lines[lineno].Address)
+	offs := dbgs.Context.IsValidBreakpoint(lineno)
+	if offs == 0 {
+		result <- false
+		return
+	}
+	LineAddress := uintptr(dbgs.Context.TextareaBegin + offs)
 
 	if dbgs.Lines[lineno-1].Breakpoint {
 		dbgs.Lines[lineno-1].Breakpoint = false

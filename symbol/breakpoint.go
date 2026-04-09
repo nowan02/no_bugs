@@ -10,6 +10,7 @@ package symbol
 import "C"
 
 import (
+	"errors"
 	"slices"
 	"syscall"
 )
@@ -33,6 +34,11 @@ func (Context *DebugContext) SetBreakpoint(address uintptr, systemcreated bool) 
 
 	if systemcreated {
 		original := Context.PeekDataWrapper(address, 1)
+
+		if original[0] == 0xCC {
+			Context.Logger.Println("Address ", address, " already has a breakpoint.")
+			return errors.New("Existing breakpoint can not be replaced with another breakpoint.")
+		}
 
 		_, err := syscall.PtracePokeData(Context.Target.Proc.Pid, address, []byte{0xCC})
 		if err != nil {

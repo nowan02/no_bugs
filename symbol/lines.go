@@ -1,11 +1,27 @@
 package symbol
 
-func (Context *DebugContext) LookForLineNo() {
+func (ctx *DebugContext) LookForLineNo() {
 	// Only one file will be supported for now!
-	for _, line := range Context.Lines {
-		if Context.TextareaBegin+line.Address == Context.Target.Regs.Rip {
-			Context.CurrentLine = line.Line
-			break
+	for _, line := range ctx.Lines {
+		if ctx.TextareaBegin+line.Address == ctx.Target.Regs.Rip {
+			ctx.Logger.Println("Currently on source line ", line.Line)
+			ctx.CurrentLine = line.Line
+			return
 		}
 	}
+	ctx.Logger.Fatalln("FATAL: Could not current determine line number, instruction pointer might be point outside of text area.")
+}
+
+// Checks if source line number can be a valid breakpoint.
+// If it is, returns the offset of that line.
+// If not, return 0.
+func (ctx *DebugContext) IsValidBreakpoint(lineno int) uint64 {
+	for _, line := range ctx.Lines {
+		if line.Line == lineno {
+			ctx.Logger.Println("Line ", lineno, " can be a valid breakpoint.")
+			return line.Address
+		}
+	}
+	ctx.Logger.Println("Line ", lineno, " is not a valid breakpoint.")
+	return 0
 }
