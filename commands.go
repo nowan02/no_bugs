@@ -2,10 +2,10 @@ package main
 
 import (
 	"debug/dwarf"
-	"runtime"
 	"slices"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 func (dbgs Session) Update(result chan bool) {
@@ -21,20 +21,25 @@ func (dbgs Session) Update(result chan bool) {
 }
 
 func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
-	err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
-	if err != nil {
-		dbgs.Context.Logger.Fatalln("FATAL ERROR: ", err.Error())
-		result <- false
-		return
-	}
-
 	for {
+		time.Sleep(50 * time.Millisecond)
+		err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
+		if err != nil {
+			dbgs.Context.Logger.Fatalln("FATAL ERROR: ", err.Error())
+			result <- false
+			return
+		}
+
 		wpid, err := syscall.Wait4(dbgs.Context.Target.PGid*-1, &dbgs.Context.Target.Wstat, 0, nil)
-		ErrCheck(err)
+		if err != nil {
+			dbgs.Context.Logger.Fatalln("FATAL ERROR: ", err.Error())
+			result <- false
+			return
+		}
 
 		if dbgs.Context.Target.Wstat.Exited() {
 			if dbgs.Context.Target.Proc.Pid == wpid {
-				dbgs.Context.Logger.Fatalln("FATAL ERROR: Traced process exited prematurely.")
+				dbgs.Context.Logger.Fatalln("Traced process exited.")
 				result <- false
 				break
 			}
@@ -80,7 +85,6 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 					}
 
 					// When base pointer value changes, and the current rbp is an entry in the callstack, we exited the subprogram
-					// CHECK IF MORE ELEMENTS NEED TO BE POPPED, NOT JUST THE LAST!
 					if dbgs.Context.CallStack.Last().ReturnAddress != dbgs.Context.Target.Regs.Rip && dbgs.Context.CallStack.ContainsAddress(dbgs.Context.Target.Regs.Rip) {
 						dbgs.Context.Logger.Println("Instruction pointer points to last entry's return address, pop top element from stack.")
 						dbgs.Context.CallStack.Pop()
@@ -92,17 +96,12 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 					dbgs.Context.LookForLineNo()
 					result <- true
 					return
-				} else {
-					err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
-					ErrCheck(err)
-					continue
 				}
 			}
 		}
 	}
-	runtime.UnlockOSThread()
-	dbgs.Context.Logger.Println("Traced process has exited or the debugger was detached.")
 	dbgs.isRunning = false
+	result <- true
 }
 
 func (dbgs Session) StepInto(result chan bool) {

@@ -76,6 +76,13 @@ func main() {
 	})
 
 	http.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			w.Header().Add("Content-Type", "")
+			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+			return
+		}
+
 		DebugSession.logger.Println("Continue until next breakpoint if exists.")
 		cmd := &Command{
 			cmd:  "continue",
@@ -93,6 +100,12 @@ func main() {
 	})
 
 	http.HandleFunc("/breakpoint", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			w.Header().Add("Content-Type", "")
+			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+			return
+		}
 		line := r.URL.Query().Get("line")
 
 		lineno, err := strconv.Atoi(line)
@@ -117,6 +130,29 @@ func main() {
 		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
 	})
 
+	http.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			w.Header().Add("Content-Type", "")
+			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+			return
+		}
+
+		cmd := &Command{
+			cmd:  "stop",
+			arg1: nil,
+		}
+
+		DebugSession.logger.Println("Sending command...")
+		commandChannel <- *cmd
+
+		DebugSession.logger.Println("Command sent. Awaiting result...")
+		await(resultChannel, DebugSession.logger)
+
+		os.Exit(0)
+	})
+
+	DebugSession.logger.Println("Serving GUI on localhost:8080")
 	http.ListenAndServe(":8080", nil)
 }
 
@@ -151,7 +187,7 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool)
 
 	for {
 		cmd := <-commandChannel
-		dbgs.logger.Println("Command received.")
+		dbgs.logger.Println("Command received: ", cmd.cmd)
 		switch cmd.cmd {
 		case "continue":
 			dbgs.Continue(false, resultChannel)
@@ -173,9 +209,9 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool)
 		case "stop":
 			dbgs.Context.Detach()
 			dbgs.logger.Println("Debugger detached, handing back control to OS.")
-			os.Exit(0)
 		default:
 			dbgs.logger.Println("Invalid command.")
+			resultChannel <- false
 			continue
 		}
 	}

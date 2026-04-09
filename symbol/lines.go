@@ -17,7 +17,7 @@ func (ctx *DebugContext) LookForLineNo() {
 // If not, return 0.
 func (ctx *DebugContext) IsValidBreakpoint(lineno int) uint64 {
 	for _, line := range ctx.Lines {
-		if line.Line == lineno {
+		if line.Line == lineno && line.IsStmt {
 			ctx.Logger.Println("Line ", lineno, " can be a valid breakpoint.")
 			return line.Address
 		}
