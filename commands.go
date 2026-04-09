@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func (dbgs Session) Update(result chan bool) {
+func (dbgs Session) Update() {
 	for _, line := range dbgs.Lines {
 		if line.Num == dbgs.Context.CurrentLine {
 			line.Current = true

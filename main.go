@@ -60,7 +60,7 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		DebugSession.logger.Println("Updating UI...")
-		DebugSession.Update(resultChannel)
+		DebugSession.Update()
 		DebugSession.logger.Println("Update successful, executing template.")
 		tmpl := template.Must(template.ParseFiles("ssr/template.html"))
 		tmpl.Execute(w, DebugSession.Lines)
