@@ -70,6 +70,17 @@ func main() {
 		if !DebugSession.isRunning {
 			DebugSession.logger.Println("Starting tracee...")
 			go DebugSession.Setup(commandChannel, resultChannel)
+		} else {
+			cmd := &Command{
+				cmd:  "stop",
+				arg1: nil,
+			}
+
+			DebugSession.logger.Println("Sending command...")
+			commandChannel <- *cmd
+
+			DebugSession.logger.Println("Command sent. Awaiting result...")
+			await(resultChannel, DebugSession.logger)
 		}
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
@@ -97,6 +108,77 @@ func main() {
 
 		w.Header().Add("Content-Type", "")
 		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+	})
+
+	http.HandleFunc("/stepover", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			w.Header().Add("Content-Type", "")
+			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+			return
+		}
+
+		cmd := &Command{
+			cmd:  "stepover",
+			arg1: nil,
+		}
+
+		DebugSession.logger.Println("Sending command...")
+		commandChannel <- *cmd
+
+		DebugSession.logger.Println("Command sent. Awaiting result...")
+		await(resultChannel, DebugSession.logger)
+
+		w.Header().Add("Content-Type", "")
+		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
+
+	})
+
+	http.HandleFunc("/stepinto", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			w.Header().Add("Content-Type", "")
+			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+			return
+		}
+
+		cmd := &Command{
+			cmd:  "stepinto",
+			arg1: nil,
+		}
+
+		DebugSession.logger.Println("Sending command...")
+		commandChannel <- *cmd
+
+		DebugSession.logger.Println("Command sent. Awaiting result...")
+		await(resultChannel, DebugSession.logger)
+
+		w.Header().Add("Content-Type", "")
+		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
+
+	})
+
+	http.HandleFunc("/stepoutof", func(w http.ResponseWriter, r *http.Request) {
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			w.Header().Add("Content-Type", "")
+			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+			return
+		}
+
+		cmd := &Command{
+			cmd:  "stepoutof",
+			arg1: nil,
+		}
+
+		DebugSession.logger.Println("Sending command...")
+		commandChannel <- *cmd
+
+		DebugSession.logger.Println("Command sent. Awaiting result...")
+		await(resultChannel, DebugSession.logger)
+
+		w.Header().Add("Content-Type", "")
+		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
 	})
 
 	http.HandleFunc("/breakpoint", func(w http.ResponseWriter, r *http.Request) {
@@ -130,35 +212,13 @@ func main() {
 		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
 	})
 
-	http.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
-			w.Header().Add("Content-Type", "")
-			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		cmd := &Command{
-			cmd:  "stop",
-			arg1: nil,
-		}
-
-		DebugSession.logger.Println("Sending command...")
-		commandChannel <- *cmd
-
-		DebugSession.logger.Println("Command sent. Awaiting result...")
-		await(resultChannel, DebugSession.logger)
-
-		os.Exit(0)
-	})
-
 	DebugSession.logger.Println("Serving GUI on localhost:8080")
 	http.ListenAndServe(":8080", nil)
 }
 
 func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool) {
 	runtime.LockOSThread()
-	ExeName, err := filepath.Abs("../bin/empty.out")
+	ExeName, err := filepath.Abs("../bin/demo.out")
 	ErrCheck(err)
 
 	tgt := target.Setup(ExeName, nil)
@@ -209,6 +269,9 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool)
 		case "stop":
 			dbgs.Context.Detach()
 			dbgs.logger.Println("Debugger detached, handing back control to OS.")
+			dbgs.isRunning = false
+			resultChannel <- true
+			return
 		default:
 			dbgs.logger.Println("Invalid command.")
 			resultChannel <- false

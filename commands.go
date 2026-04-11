@@ -126,7 +126,12 @@ func (dbgs Session) StepInto(result chan bool) {
 func (dbgs Session) StepOutOf(result chan bool) {
 	l_stack := len(dbgs.Context.CallStack.Stack)
 
-	dbgs.Continue(false, result)
+	for l_stack <= len(dbgs.Context.CallStack.Stack) {
+		dbgs.Continue(true, result)
+		if !<-result {
+
+		}
+	}
 
 	if <-result {
 		// Lenght of the stack decreased, which means step out of was successful.
