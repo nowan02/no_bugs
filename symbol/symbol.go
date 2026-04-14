@@ -33,12 +33,9 @@ func (Context *DebugContext) LookForSymbolByName(SymbolName string, SymbolType d
 	return nil, nil
 }
 
-// Should be used when stopped at a breakpoint!
-// Returns the entry which has the same address offset as the current PC value.
-// If a function starts at this address, it returns its entry.
-func (Context *DebugContext) LookForSymbolByPC() (*dwarf.Entry, error) {
+func (Context *DebugContext) LookForSymbolByPC(Rip uint64) (*dwarf.Entry, error) {
 
-	offset := Context.Target.Regs.Rip - Context.TextareaBegin
+	offset := Rip - Context.TextareaBegin - 1
 
 	Context.DwarfReader.Seek(0)
 
@@ -101,11 +98,11 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int6
 		case 0x03:
 			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes))
 			address := Context.TextareaBegin + uint64(offset_val)
-			data = Context.PeekDataWrapper(uintptr(address), 8)
+			data = PeekDataWrapper(Context.Target.Proc.Pid, uintptr(address), 8)
 		// Local offset
 		case 0x91:
 			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes)) - 128 + 16
-			data = Context.PeekDataWrapper(uintptr(StackBase+offset_val), 8)
+			data = PeekDataWrapper(Context.Target.Proc.Pid, uintptr(StackBase+offset_val), 8)
 		default:
 			return 0, errors.New("location data was not in the expected format ([]byte)")
 		}
@@ -113,24 +110,5 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, StackBase int6
 		return uint64(binary.LittleEndian.Uint64(data)), nil
 	} else {
 		return 0, errors.New("unable to get bytes from memory location of this variable")
-	}
-}
-
-func (Context *DebugContext) getVariableType(Entry *dwarf.Entry) (vartype *dwarf.Field, err error) {
-	data := Entry.AttrField(dwarf.AttrType).Val
-	if data == nil {
-		return nil, errors.New("dwarf Symbol does not contain type attribute")
-	}
-
-	DW_AT_type, ok := data.(dwarf.Offset)
-
-	if ok {
-		vartype, err := Context.LookForSymbolByDWARFOffset(DW_AT_type)
-		if err != nil {
-			return nil, err
-		}
-		return vartype.AttrField(dwarf.AttrName), nil
-	} else {
-		return nil, errors.New("Unexpected conversion error -> DW_AT_type offset could not be converted to type dwarf.Offset.")
 	}
 }

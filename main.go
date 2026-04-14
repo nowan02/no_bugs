@@ -10,274 +10,148 @@ package main
 import "C"
 
 import (
-	"log"
+	"debug/dwarf"
 	"net/http"
 	"no_bugs/ssr"
 	"no_bugs/symbol"
 	"no_bugs/target"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
+	"syscall"
 	"text/template"
 )
 
 type Session struct {
-	Context   *symbol.DebugContext
-	Lines     []*ssr.Row
-	isRunning bool
-	logger    *log.Logger
-}
-
-type Command struct {
-	cmd  string
-	arg1 interface{}
-}
-
-func await(ret chan bool, log *log.Logger) {
-	for {
-		result := <-ret
-		if result {
-			log.Println("Command ran successfully.")
-			return
-		} else {
-			log.Println("Command ran with error.")
-			return
-		}
-	}
+	Context symbol.DebugContext
+	Tracee  target.Tracee
+	Lines   []ssr.Row
 }
 
 func main() {
 	var DebugSession Session
-	DebugSession.isRunning = false
-	DebugSession.logger = log.New(os.Stdout, "GUI: ", log.LstdFlags)
 
-	commandChannel := make(chan Command, 1)
-	resultChannel := make(chan bool, 1)
+	DebugSession.Setup()
 
-	fs := http.FileServer(http.Dir("ssr/public"))
-	http.Handle("/public/", http.StripPrefix("/public/", fs))
+	tmpl := template.Must(template.ParseFiles("ssr/template.html"))
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		DebugSession.logger.Println("Updating UI...")
-		DebugSession.Update()
-		DebugSession.logger.Println("Update successful, executing template.")
-		tmpl := template.Must(template.ParseFiles("ssr/template.html"))
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl.Execute(w, DebugSession.Lines)
+		DebugSession.Update()
 	})
 
-	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Starting tracee...")
-			go DebugSession.Setup(commandChannel, resultChannel)
-		} else {
-			cmd := &Command{
-				cmd:  "stop",
-				arg1: nil,
-			}
-
-			DebugSession.logger.Println("Sending command...")
-			commandChannel <- *cmd
-
-			DebugSession.logger.Println("Command sent. Awaiting result...")
-			await(resultChannel, DebugSession.logger)
-		}
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+	mux.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
+		DebugSession.Continue(false)
+		http.Redirect(w, r, "localhost:8080/", http.StatusTemporaryRedirect)
 	})
 
-	http.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
-			w.Header().Add("Content-Type", "")
-			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		DebugSession.logger.Println("Continue until next breakpoint if exists.")
-		cmd := &Command{
-			cmd:  "continue",
-			arg1: nil,
-		}
-
-		DebugSession.logger.Println("Command sent...")
-		commandChannel <- *cmd
-
-		DebugSession.logger.Println("Awaiting result.")
-		await(resultChannel, DebugSession.logger)
-
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-	})
-
-	http.HandleFunc("/stepover", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
-			w.Header().Add("Content-Type", "")
-			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		cmd := &Command{
-			cmd:  "stepover",
-			arg1: nil,
-		}
-
-		DebugSession.logger.Println("Sending command...")
-		commandChannel <- *cmd
-
-		DebugSession.logger.Println("Command sent. Awaiting result...")
-		await(resultChannel, DebugSession.logger)
-
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
-
-	})
-
-	http.HandleFunc("/stepinto", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
-			w.Header().Add("Content-Type", "")
-			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		cmd := &Command{
-			cmd:  "stepinto",
-			arg1: nil,
-		}
-
-		DebugSession.logger.Println("Sending command...")
-		commandChannel <- *cmd
-
-		DebugSession.logger.Println("Command sent. Awaiting result...")
-		await(resultChannel, DebugSession.logger)
-
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
-
-	})
-
-	http.HandleFunc("/stepoutof", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
-			w.Header().Add("Content-Type", "")
-			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		cmd := &Command{
-			cmd:  "stepoutof",
-			arg1: nil,
-		}
-
-		DebugSession.logger.Println("Sending command...")
-		commandChannel <- *cmd
-
-		DebugSession.logger.Println("Command sent. Awaiting result...")
-		await(resultChannel, DebugSession.logger)
-
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
-	})
-
-	http.HandleFunc("/breakpoint", func(w http.ResponseWriter, r *http.Request) {
-		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
-			w.Header().Add("Content-Type", "")
-			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
-			return
-		}
-		line := r.URL.Query().Get("line")
-
-		lineno, err := strconv.Atoi(line)
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		cmd := &Command{
-			cmd:  "breakpoint",
-			arg1: lineno,
-		}
-
-		DebugSession.logger.Println("Sending command...")
-		commandChannel <- *cmd
-
-		DebugSession.logger.Println("Command sent. Awaiting result...")
-		await(resultChannel, DebugSession.logger)
-
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
-	})
-
-	DebugSession.logger.Println("Serving GUI on localhost:8080")
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":8080", mux)
 }
 
-func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool) {
-	runtime.LockOSThread()
-	ExeName, err := filepath.Abs("../bin/demo.out")
+func (dbgs *Session) Setup() {
+	ExeName := "../bin/empty.out"
+
+	dbgs.Tracee = *target.Setup(ExeName, nil)
+
+	ctx, err := symbol.InitContext(&dbgs.Tracee)
 	ErrCheck(err)
 
-	tgt := target.Setup(ExeName, nil)
+	ctx.TextareaBegin, ctx.TextareaEnd = dbgs.Tracee.FindTextareaLinux()
 
-	dbgs.Context, err = symbol.InitContext(tgt)
-	ErrCheck(err)
-
-	dbgs.Context.TextareaBegin, dbgs.Context.TextareaEnd = dbgs.Context.Target.FindTextareaLinux()
+	dbgs.Context = *ctx
 
 	dbgs.Lines, err = ssr.ReadSourceFile("../bin/main.c")
 	ErrCheck(err)
 
 	// Place system breakpoint on all lines
-	for _, line := range dbgs.Context.Lines {
+	/*for _, line := range dbgs.Context.Lines {
 		addr := dbgs.Context.TextareaBegin + line.Address
-		dbgs.Context.SetBreakpoint(uintptr(addr), true)
+		dbgs.Context.SetBreakpoint(dbgs.Tracee.Proc.Pid, uintptr(addr), false)
+	}*/
+	dbgs.Context.SetBreakpoint(dbgs.Tracee.Proc.Pid, uintptr(ctx.TextareaBegin+ctx.Entrypoint), false)
+	// WHAT?
+}
+
+func (dbgs *Session) Update() {
+
+}
+
+func (dbgs *Session) Continue(SingleStep bool) {
+	err := syscall.PtraceCont(dbgs.Context.Target.Proc.Pid, 0)
+	if err != nil {
+		return
 	}
-
-	// User breakpoint on the entry main()
-	dbgs.Context.SetBreakpoint(uintptr(dbgs.Context.TextareaBegin+dbgs.Context.Entrypoint), false)
-
-	dbgs.Continue(false, resultChannel)
-	await(resultChannel, dbgs.logger)
-
-	dbgs.isRunning = true
 
 	for {
-		cmd := <-commandChannel
-		dbgs.logger.Println("Command received: ", cmd.cmd)
-		switch cmd.cmd {
-		case "continue":
-			dbgs.Continue(false, resultChannel)
-		case "singlestep":
-			dbgs.Continue(true, resultChannel)
-		case "stepinto":
-			dbgs.StepInto(resultChannel)
-		case "stepoutof":
-			dbgs.StepOutOf(resultChannel)
-		case "breakpoint":
-			lineno, ok := cmd.arg1.(int)
-			if ok {
-				dbgs.BreakOnLine(lineno, resultChannel)
-			} else {
-				dbgs.logger.Fatalln("ERROR: first argument for this command was not an integer.")
+		wpid, err := syscall.Wait4(dbgs.Tracee.PGid*-1, &dbgs.Tracee.Wstat, 0, nil)
+		ErrCheck(err)
+
+		if dbgs.Tracee.Wstat.Exited() {
+			if dbgs.Tracee.Proc.Pid == wpid {
+				break
 			}
-		case "stepover":
-			dbgs.StepOver()
-		case "stop":
-			dbgs.Context.Detach()
-			dbgs.logger.Println("Debugger detached, handing back control to OS.")
-			dbgs.isRunning = false
-			resultChannel <- true
-			return
-		default:
-			dbgs.logger.Println("Invalid command.")
-			resultChannel <- false
-			continue
+		} else {
+			// Debugger is currently stopped at a breakpoint or used single step.
+			if dbgs.Tracee.Wstat.StopSignal() == syscall.SIGTRAP && dbgs.Tracee.Wstat.TrapCause() != syscall.PTRACE_EVENT_CLONE {
+
+				syscall.PtraceGetRegs(wpid, dbgs.Tracee.Regs)
+
+				// Temporary, does not support stepping into other areas.
+				/*if dbgs.Tracee.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Tracee.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
+					println("End of main()")
+					syscall.PtraceCont(wpid, 0)
+					runtime.UnlockOSThread()
+					break
+				}*/
+
+				// We have to substract 1 from PC to get the breakpoint address, since
+				// PC advances over INT3 then stops.
+				setbp, err := dbgs.Context.StepOverBreakpoint(wpid, uintptr(dbgs.Tracee.Regs.Rip-1), dbgs.Tracee.Regs)
+				ErrCheck(err)
+				if setbp {
+					// Breakpoint was found in the map
+					println("Stopped at breakpoint:", strconv.FormatUint(dbgs.Tracee.Regs.Rip, 16))
+
+					entry, err := dbgs.Context.LookForSymbolByPC(dbgs.Tracee.Regs.Rip)
+
+					if err != nil {
+						println("No DWARF entry for current PC, skipping")
+					} else {
+						// Add call stack entry if it is a subprogram.
+						if entry.Tag == dwarf.TagSubprogram {
+
+							dbgs.Context.CallStack.Push(entry, dbgs.Tracee.Regs.Rbp)
+
+							if entry != nil {
+								println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string))
+							}
+						}
+					}
+					// When base pointer value changes, we exited the subprogram.
+					if dbgs.Context.CallStack.Last().Rbp != dbgs.Tracee.Regs.Rbp && len(dbgs.Context.CallStack.Stack) > 0 {
+						dbgs.Context.CallStack.Pop()
+					}
+				}
+
+				PrintRegisters(dbgs.Tracee.Regs)
+
+				dbgs.Context.CurrentLine = symbol.LookForLineNo(&dbgs.Context, dbgs.Tracee.Regs)
+
+				_, exists := dbgs.Context.SystemBreakpoints[uintptr(dbgs.Tracee.Regs.Rip-1)]
+
+				// System breakpoints do not give the user control,
+				// exception is when using step over.
+				if exists && !SingleStep {
+					err := syscall.PtraceCont(dbgs.Tracee.Proc.Pid, 0)
+					ErrCheck(err)
+					continue
+				} else {
+					return
+				}
+			}
 		}
 	}
+	println("Program likely exited.")
 }
 
 // REFACTOR!
