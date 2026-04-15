@@ -18,6 +18,7 @@ func (dbgs Session) Update(result chan bool, dp *Display) {
 	}
 	// Update vars below:
 
+	result <- true
 }
 
 func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
@@ -92,7 +93,7 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 				}
 
 				// If stopped at user bp, or step over was used, hand back control
-				if slices.Contains(dbgs.Context.UserBreakpoints, uintptr(dbgs.Context.Target.Regs.Rip)) && !SingleStep {
+				if slices.Contains(dbgs.Context.UserBreakpoints, uintptr(dbgs.Context.Target.Regs.Rip)) || SingleStep {
 					dbgs.Context.LookForLineNo()
 					result <- true
 					return
@@ -107,8 +108,10 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 func (dbgs Session) StepInto(result chan bool) {
 	l_stack := len(dbgs.Context.CallStack.Stack)
 
-	dbgs.Continue(true, result)
-	if <-result {
+	localresult := make(chan bool, 1)
+
+	dbgs.Continue(true, localresult)
+	if <-localresult {
 		// Lenght of the stack increased, which means step into was successful.
 		if l_stack < len(dbgs.Context.CallStack.Stack) {
 			dbgs.Context.Logger.Println("Step into successful.")
@@ -126,9 +129,11 @@ func (dbgs Session) StepInto(result chan bool) {
 func (dbgs Session) StepOutOf(result chan bool) {
 	l_stack := len(dbgs.Context.CallStack.Stack)
 
+	localresult := make(chan bool, 1)
+
 	for l_stack == len(dbgs.Context.CallStack.Stack) {
-		dbgs.Continue(true, result)
-		if !<-result {
+		dbgs.Continue(true, localresult)
+		if !<-localresult {
 			dbgs.Context.Logger.Fatalln("ERROR: Step out of could not be performed, internal continue operation likely failed.")
 			result <- false
 		}
@@ -141,11 +146,13 @@ func (dbgs Session) StepOutOf(result chan bool) {
 func (dbgs Session) StepOver(result chan bool) {
 	l_stack := len(dbgs.Context.CallStack.Stack)
 
-	dbgs.StepInto(result)
-	if <-result {
+	localresult := make(chan bool, 1)
+
+	dbgs.StepInto(localresult)
+	if <-localresult {
 		if l_stack > len(dbgs.Context.CallStack.Stack) {
-			dbgs.StepOutOf(result)
-			if <-result {
+			dbgs.StepOutOf(localresult)
+			if <-localresult {
 				dbgs.Context.Logger.Println("Step out of successful, stack size decreased.")
 				result <- true
 			}

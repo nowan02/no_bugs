@@ -40,9 +40,9 @@
                                 <a class="unset-break" href="http://localhost:8080/breakpoint?line={{.Num}}">   {{.Num}}.   </a>
                                 {{end}}
                                 {{if .Current}}
-                                <li class="code" style="margin-left: 15px;background-color:orange;color: black;">{{.Text}}</p>
+                                <li class="code" style="list-style-type:circle;margin-left: 15px;background-color:orange;color: black;">{{.Text}}</p>
                                 {{else}}
-                                <li class="code" style="margin-left: 15px;"> {{.Text}}</li>
+                                <li class="code" style="list-style-type:none;margin-left: 15px;"> {{.Text}}</li>
                                 {{end}}
                             </div>
                     {{end}}

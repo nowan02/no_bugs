@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync"
 	"text/template"
 )
 
@@ -64,9 +65,22 @@ func main() {
 	http.Handle("/public/", http.StripPrefix("/public/", fs))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		DebugSession.logger.Println("Updating UI...")
+		if DebugSession.isRunning {
+			DebugSession.logger.Println("Updating UI...")
 
-		DebugSession.logger.Println("Update successful, executing template.")
+			cmd := &Command{
+				cmd:  "update",
+				arg1: nil,
+			}
+
+			DebugSession.logger.Println("Sending command...")
+			commandChannel <- *cmd
+
+			DebugSession.logger.Println("Command sent. Awaiting result...")
+			await(resultChannel, DebugSession.logger)
+			DebugSession.logger.Println("Update performed, executing template.")
+		}
+
 		tmpl := template.Must(template.ParseFiles("ssr/template.html"))
 		tmpl.Execute(w, Display)
 	})
@@ -74,7 +88,14 @@ func main() {
 	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
 			DebugSession.logger.Println("Starting tracee...")
-			go DebugSession.Setup(commandChannel, resultChannel, &Display)
+
+			var wg sync.WaitGroup
+
+			wg.Add(1)
+
+			go DebugSession.Setup(commandChannel, resultChannel, &wg, &Display)
+
+			wg.Wait()
 		} else {
 			cmd := &Command{
 				cmd:  "stop",
@@ -221,7 +242,7 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool, dp *Display) {
+func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool, wg *sync.WaitGroup, dp *Display) {
 	runtime.LockOSThread()
 	ExeName, err := filepath.Abs("../bin/demo.out")
 	ErrCheck(err)
@@ -250,7 +271,7 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool,
 
 	dbgs.isRunning = true
 
-	resultChannel <- true
+	wg.Done()
 
 	for {
 		cmd := <-commandChannel
