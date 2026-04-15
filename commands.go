@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-func (dbgs Session) Update() {
-	for _, line := range dbgs.Lines {
+func (dbgs Session) Update(result chan bool, dp *Display) {
+	for _, line := range dp.Lines {
 		if line.Num == dbgs.Context.CurrentLine {
 			line.Current = true
 		} else {
@@ -119,41 +119,46 @@ func (dbgs Session) StepInto(result chan bool) {
 			result <- true
 		}
 	} else {
-		dbgs.Context.Logger.Fatalln("Step into could not be performed, internal continue operation likely failed.")
+		dbgs.Context.Logger.Fatalln("ERROR: Step into could not be performed, internal continue operation likely failed.")
 	}
 }
 
 func (dbgs Session) StepOutOf(result chan bool) {
 	l_stack := len(dbgs.Context.CallStack.Stack)
 
-	for l_stack <= len(dbgs.Context.CallStack.Stack) {
+	for l_stack == len(dbgs.Context.CallStack.Stack) {
 		dbgs.Continue(true, result)
 		if !<-result {
-
+			dbgs.Context.Logger.Fatalln("ERROR: Step out of could not be performed, internal continue operation likely failed.")
+			result <- false
 		}
 	}
 
+	dbgs.Context.Logger.Println("Step out of successful, stack size decreased.")
+	result <- true
+}
+
+func (dbgs Session) StepOver(result chan bool) {
+	l_stack := len(dbgs.Context.CallStack.Stack)
+
+	dbgs.StepInto(result)
 	if <-result {
-		// Lenght of the stack decreased, which means step out of was successful.
 		if l_stack > len(dbgs.Context.CallStack.Stack) {
-			dbgs.Context.Logger.Println("Step out of successful.")
-			result <- true
-			// If not, the debugger performed a single step
+			dbgs.StepOutOf(result)
+			if <-result {
+				dbgs.Context.Logger.Println("Step out of successful, stack size decreased.")
+				result <- true
+			}
 		} else {
-			dbgs.Context.Logger.Println("Step out of was not possible, performed single step instead.")
-			result <- true
+			dbgs.Context.Logger.Println("Step Over performed single step.")
 		}
 	} else {
-		dbgs.Context.Logger.Fatalln("Step out of could not be performed, internal continue operation likely failed.")
+		dbgs.Context.Logger.Fatalln("ERROR: Step Over could not performed, internal StepInto operation likely failed.")
 		result <- false
 	}
 }
 
-func (dbgs Session) StepOver() {
-	//TODO
-}
-
-func (dbgs Session) BreakOnLine(lineno int, result chan bool) {
+func (dbgs Session) BreakOnLine(lineno int, result chan bool, dp *Display) {
 	offs := dbgs.Context.IsValidBreakpoint(lineno)
 	if offs == 0 {
 		result <- false
@@ -161,8 +166,8 @@ func (dbgs Session) BreakOnLine(lineno int, result chan bool) {
 	}
 	LineAddress := uintptr(dbgs.Context.TextareaBegin + offs)
 
-	if dbgs.Lines[lineno-1].Breakpoint {
-		dbgs.Lines[lineno-1].Breakpoint = false
+	if dp.Lines[lineno-1].Breakpoint {
+		dp.Lines[lineno-1].Breakpoint = false
 		exists, err := dbgs.Context.RemoveBreakpoint(LineAddress)
 		if err != nil {
 			dbgs.Context.Logger.Fatalln("Error occured: ", err.Error())
@@ -179,7 +184,7 @@ func (dbgs Session) BreakOnLine(lineno int, result chan bool) {
 		}
 
 	} else {
-		dbgs.Lines[lineno-1].Breakpoint = true
+		dp.Lines[lineno-1].Breakpoint = true
 		dbgs.Context.SetBreakpoint(LineAddress, false)
 		dbgs.Context.Logger.Println("Breakpoint was set on line ", lineno, ".")
 		result <- true
