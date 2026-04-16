@@ -71,19 +71,14 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 		// set back PC with 1 byte after replacement to rerun the correct instruction.
 		Context.Target.Regs.Rip -= 1
 		err = syscall.PtraceSetRegs(Context.Target.Proc.Pid, Context.Target.Regs)
-		println("Ptrace Setregs")
 		if err != nil {
 			return false, err
 		}
 
 		err = syscall.PtraceSingleStep(Context.Target.Proc.Pid)
-		println("Ptrace Singlestep")
 		if err != nil {
 			return false, err
 		}
-
-		//Context.Target.Regs.Rip += 1
-		//println("Increase Rip to original increment.")
 
 		Context.SetBreakpoint(uintptr(Context.Target.Regs.Rip), true)
 

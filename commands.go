@@ -76,18 +76,21 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 					} else {
 						// Add call stack entry if it is a subprogram.
 						if entry.Tag == dwarf.TagSubprogram {
+							PrintRegisters(dbgs.Context.Target.Regs)
 
-							ret := dbgs.Context.GetCurrentReturnAddress()
-							dbgs.Context.CallStack.Push(entry, ret)
+							// Push return address
+
+							returnaddress := dbgs.Context.GetCurrentReturnAddress()
+
+							dbgs.Context.CallStack.Push(entry, returnaddress)
 
 							dbgs.Context.Logger.Println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string), "was put on the stack.")
 
 						}
 					}
 
-					// When base pointer value changes, and the current rbp is an entry in the callstack, we exited the subprogram
-					if dbgs.Context.CallStack.Last().ReturnAddress != dbgs.Context.Target.Regs.Rip && dbgs.Context.CallStack.ContainsAddress(dbgs.Context.Target.Regs.Rip) {
-						dbgs.Context.Logger.Println("Instruction pointer points to last entry's return address, pop top element from stack.")
+					if dbgs.Context.CallStack.Last().ReturnAddress == dbgs.Context.Target.Regs.Rip {
+						dbgs.Context.Logger.Println("Instruction pointer points to last entry's rbp, pop top element from stack.")
 						dbgs.Context.CallStack.Pop()
 					}
 				}
@@ -150,7 +153,7 @@ func (dbgs Session) StepOver(result chan bool) {
 
 	dbgs.StepInto(localresult)
 	if <-localresult {
-		if l_stack > len(dbgs.Context.CallStack.Stack) {
+		if l_stack < len(dbgs.Context.CallStack.Stack) {
 			dbgs.StepOutOf(localresult)
 			if <-localresult {
 				dbgs.Context.Logger.Println("Step out of successful, stack size decreased.")
@@ -158,6 +161,7 @@ func (dbgs Session) StepOver(result chan bool) {
 			}
 		} else {
 			dbgs.Context.Logger.Println("Step Over performed single step.")
+			result <- true
 		}
 	} else {
 		dbgs.Context.Logger.Fatalln("ERROR: Step Over could not performed, internal StepInto operation likely failed.")
