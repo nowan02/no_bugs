@@ -40,9 +40,6 @@ type DebugContext struct {
 	// Current line on source code
 	CurrentLine int
 
-	// Current instruction from source code
-	CurrentInstr string
-
 	// Start address of the text area of the executable
 	TextareaBegin uint64
 
