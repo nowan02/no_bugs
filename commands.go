@@ -134,15 +134,20 @@ func (dbgs Session) StepOutOf(result chan bool) {
 
 	localresult := make(chan bool, 1)
 
-	for l_stack == len(dbgs.Context.CallStack.Stack) {
+	for {
 		dbgs.Continue(true, localresult)
 		if !<-localresult {
 			dbgs.Context.Logger.Fatalln("ERROR: Step out of could not be performed, internal continue operation likely failed.")
 			result <- false
+			return
+		}
+		if l_stack > len(dbgs.Context.CallStack.Stack) ||
+			slices.Contains(dbgs.Context.UserBreakpoints, uintptr(dbgs.Context.Target.Regs.Rip)) {
+			break
 		}
 	}
 
-	dbgs.Context.Logger.Println("Step out of successful, stack size decreased.")
+	dbgs.Context.Logger.Println("Step out of successful.")
 	result <- true
 }
 
@@ -153,10 +158,10 @@ func (dbgs Session) StepOver(result chan bool) {
 
 	dbgs.StepInto(localresult)
 	if <-localresult {
-		if l_stack < len(dbgs.Context.CallStack.Stack) {
+		if l_stack < len(dbgs.Context.CallStack.Stack) && !slices.Contains(dbgs.Context.UserBreakpoints, uintptr(dbgs.Context.Target.Regs.Rip)) {
 			dbgs.StepOutOf(localresult)
 			if <-localresult {
-				dbgs.Context.Logger.Println("Step out of successful, stack size decreased.")
+				dbgs.Context.Logger.Println("Step out of successful.")
 				result <- true
 			}
 		} else {

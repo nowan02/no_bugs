@@ -73,5 +73,10 @@ func (s *CallStack) Last() *CallStackEntry {
 func (Context *DebugContext) GetCurrentReturnAddress() uint64 {
 	addr := Context.PeekDataWrapper(uintptr(Context.Target.Regs.Rsp), 8)
 
+	err := Context.SetBreakpoint(uintptr(Context.Target.Regs.Rsp), true)
+	if err != nil {
+		Context.Logger.Println("Breakpoint already exists at return address, skipping.")
+	}
+
 	return binary.LittleEndian.Uint64(addr)
 }
