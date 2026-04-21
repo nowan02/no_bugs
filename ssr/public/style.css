@@ -1,35 +1,15 @@
 div {
-    border-width: 2px;
+    border-width: 1px;
     border-color: crimson;
     border-style: dashed;
 }
 
 .row-container {
     display: flex;
-}
-
-.row-container > div {
     flex-direction: row;
-    margin: 10px;
 }
 
 .column-container {
     display: flex;
-}
-
-.column-container > div {
     flex-direction: column;
-    margin: 10px;
-}
-
-.set-break {
-    border-color: red;
-    border-style: double;
-    border-width: 2px;
-}
-
-.unset-break {
-    border-color: green;
-    border-style: double;
-    border-width: 2px;
 }

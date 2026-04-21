@@ -1,50 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/public/style.css">
     <title>no_bugs</title>
 </head>
+
 <body>
     <div class="row-container">
-        <div class="column-container"></
-            <!--Control-->
+        <div class="column-container">
+            </ <!--Control-->
             <div class="column-container">
-                <div class="row-container">
+                <div>
                     <div class="row-container">
                         <div>
-                            <a href="http://localhost:8080/continue">Continue</a>
+                            <form action="http://localhost:8080/continue">
+                                <button
+                                    style="font-size: 14px; font-weight: bold;background-color: darkgray;color: black;">Continue</button>
+                            </form>
                         </div>
                         <div>
-                            <a href="http://localhost:8080/stepover">Step Over</a>
+                            <form action="http://localhost:8080/stepover">
+                                <button
+                                    style="font-size: 14px; font-weight: bold;background-color: darkgray;color: black;">Step
+                                    Over</button>
+                            </form>
                         </div>
                         <div>
-                            <a href="http://localhost:8080/stepinto">Step Into</a>
+                            <form action="http://localhost:8080/stepinto">
+                                <button
+                                    style="font-size: 14px; font-weight: bold;background-color: darkgray;color: black;">Step
+                                    Into</button>
+                            </form>
                         </div>
                         <div>
-                            <a href="http://localhost:8080/stepoutof">Step Out Of</a>
+                            <form action="http://localhost:8080/stepoutof">
+                                <button
+                                    style="font-size: 14px; font-weight: bold;background-color: darkgray;color: black;">Step
+                                    Out Of</button>
+                            </form>
                         </div>
                         <div>
-                            <a href="http://localhost:8080/start">Start/Stop</a>
+                            <form action="http://localhost:8080/start">
+                                <button
+                                    style="font-size: 14px; font-weight: bold; background-color: brown;color: white;">Start/Stop</button>
+                            </form>
                         </div>
                     </div>
                 </div>
                 <!--Source Code-->
                 <div class="row-container">
                     {{range .Lines}}
-                            <div class="row-container">
-                                {{if .Breakpoint}}
-                                <a class="set-break" href="http://localhost:8080/breakpoint?line={{.Num}}">   {{.Num}}.   </a>
-                                {{else}}
-                                <a class="unset-break" href="http://localhost:8080/breakpoint?line={{.Num}}">   {{.Num}}.   </a>
-                                {{end}}
-                                {{if .Current}}
-                                <li class="code" style="list-style-type:circle;margin-left: 15px;background-color:orange;color: black;">{{.Text}}</p>
-                                {{else}}
-                                <li class="code" style="list-style-type:none;margin-left: 15px;"> {{.Text}}</li>
-                                {{end}}
-                            </div>
+                    <div style="display: flex;flex-direction: row;background-color: antiquewhite;">
+                        {{if .Breakpoint}}
+                        <form action="http://localhost:8080/breakpoint?line={{.Num}}" method="post">
+                            <button style="width: 30px; background-color: brown;color: white;">{{.Num}}.</button>
+                        </form>
+                        {{else}}
+                        <form action="http://localhost:8080/breakpoint?line={{.Num}}" method="post">
+                            <button style="width: 30px; background-color: aquamarine;color: black;">{{.Num}}.</button>
+                        </form>
+                        {{end}}
+                        {{if .Current}}
+                        <pre style="font-size:14px; margin-left: 10px; background-color: orange;">{{.Text}}</pre>
+                        {{else}}
+                        <pre style="font-size:14px; margin-left: 10px;">{{.Text}}</pre>
+                        {{end}}
+                    </div>
                     {{end}}
                 </div>
             </div>
@@ -53,14 +77,15 @@
             <div class="row-container">
                 <!--Locals-->
                 <div>
-                    
-                </div >
+
+                </div>
                 <!--Watch-->
                 <div>
-                    
+
                 </div>
             </div>
         </div>
     </div>
 </body>
+
 </html>
