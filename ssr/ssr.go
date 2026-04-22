@@ -2,6 +2,7 @@ package ssr
 
 import (
 	"bufio"
+	"html"
 	"os"
 )
 
@@ -37,7 +38,7 @@ func ReadSourceFile(filepath string) ([]*Row, error) {
 	for scanner.Scan() {
 		newRow := &Row{
 			Current:    false,
-			Text:       scanner.Text(),
+			Text:       html.EscapeString(scanner.Text()),
 			Num:        n,
 			Breakpoint: false,
 		}

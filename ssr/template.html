@@ -51,9 +51,9 @@
                     </div>
                 </div>
                 <!--Source Code-->
-                <div class="row-container">
+                <div class="row-container-code">
                     {{range .Lines}}
-                    <div style="display: flex;flex-direction: row;background-color: antiquewhite;">
+                    <div style="margin: 0; align-items:baseline; height: fit-content; display: flex;flex-direction: row;background-color: antiquewhite;">
                         {{if .Breakpoint}}
                         <form action="http://localhost:8080/breakpoint?line={{.Num}}" method="post">
                             <button style="width: 30px; background-color: brown;color: white;">{{.Num}}.</button>
@@ -64,9 +64,9 @@
                         </form>
                         {{end}}
                         {{if .Current}}
-                        <pre style="font-size:14px; margin-left: 10px; background-color: orange;">{{.Text}}</pre>
+                        <pre style="white-space: pre-wrap; min-width: 0; font-size:14px; margin-left: 10px; background-color: orange;">{{.Text}}</pre>
                         {{else}}
-                        <pre style="font-size:14px; margin-left: 10px;">{{.Text}}</pre>
+                        <pre style="white-space: pre-wrap; min-width: 0;font-size:14px; margin-left: 10px;">{{.Text}}</pre>
                         {{end}}
                     </div>
                     {{end}}

@@ -1,10 +1,9 @@
-div {
-    border-width: 1px;
-    border-color: crimson;
-    border-style: dashed;
+.row-container {
+    display: flex;
+    flex-direction: row;
 }
 
-.row-container {
+.row-container-cmd {
     display: flex;
     flex-direction: row;
 }
