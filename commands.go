@@ -17,6 +17,7 @@ func (dbgs Session) Update(result chan bool, dp *Display) {
 		}
 	}
 	// Update vars below:
+	dbgs.Context.ResolveVars()
 
 	result <- true
 }

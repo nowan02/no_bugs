@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"no_bugs/ssr"
 	"no_bugs/target"
 	"os"
 	"syscall"
@@ -26,7 +27,7 @@ type DebugContext struct {
 	Lines []*dwarf.LineEntry
 
 	// Entries of followed symbols
-	FollowedSym []*dwarf.Entry
+	FollowedSym []*ssr.Variables
 
 	// Contains offsets of breakpoints set by user.
 	UserBreakpoints []uintptr
@@ -70,7 +71,7 @@ func InitContext(Target *target.Tracee) (*DebugContext, error) {
 		DwarfReader:       reader,
 		SymbolTreeRoot:    make([]*TreeLeaf, 0),
 		Lines:             make([]*dwarf.LineEntry, 0),
-		FollowedSym:       make([]*dwarf.Entry, 0),
+		FollowedSym:       make([]*ssr.Variables, 0),
 		UserBreakpoints:   make([]uintptr, 0),
 		SystemBreakpoints: make(map[uintptr][]byte),
 		Entrypoint:        0,
