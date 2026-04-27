@@ -282,7 +282,7 @@ func (Context *DebugContext) ResolveVars() {
 					Context.Logger.Println("ERROR: ", err.Error())
 				}
 
-				data = []byte{0x00}
+				data = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 				if addr != 0 {
 					data = make([]byte, 0)
@@ -299,7 +299,11 @@ func (Context *DebugContext) ResolveVars() {
 							i++
 						}
 					} else {
-						data = Context.PeekDataWrapper(uintptr(addr), int(size))
+						data, err = Context.getVariableValue(current, int(size))
+						if err != nil {
+							Context.Logger.Println("ERROR: ", err.Error())
+							data = []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+						}
 					}
 				}
 
