@@ -76,11 +76,11 @@ func (Context *DebugContext) LookForSymbolByDWARFOffset(offset dwarf.Offset) (*d
 // Since local variables always have a negative offset in relation to the stack base pointer
 // positive values are assumed to be global offsets!
 // Entry: DWARF entry of variable to resolve, length: number of bytes to read.
-func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) (uint64, error) {
+func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) ([]byte, error) {
 	ent := Entry.AttrField(dwarf.AttrLocation)
 
 	if ent == nil {
-		return 0, errors.New("dwarf Symbol does not contain location attribute")
+		return nil, errors.New("dwarf Symbol does not contain location attribute")
 	}
 
 	data := Entry.AttrField(dwarf.AttrLocation).Val
@@ -116,16 +116,16 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) (u
 			address := int64(Context.Target.Regs.Rbp) + offset_val
 			data = Context.PeekDataWrapper(uintptr(address), length)
 		default:
-			return 0, errors.New("location data was not in the expected format ([]byte)")
+			return nil, errors.New("location data was not in the expected format ([]byte)")
 		}
 
 		// Expand data to 8 bytes in length
 		for len(data) < 8 {
 			data = append(data, 0x00)
 		}
-		return binary.LittleEndian.Uint64(data), nil
+		return data, nil
 	} else {
-		return 0, errors.New("Unable to get bytes from memory location of this variable")
+		return nil, errors.New("Unable to get bytes from memory location of this variable")
 	}
 }
 
@@ -177,7 +177,7 @@ func (Context *DebugContext) getVariableType(Entry *dwarf.Entry) (*dwarf.Entry, 
 }
 
 // Resolves a single variable, prepares it for frontend.
-func (Context *DebugContext) ResolveSingle(signed bool, bytesize int64, typename string, value uint64) *ssr.Variables {
+func (Context *DebugContext) ResolveSingle(signed bool, bytesize int64, typename string, value []byte) *ssr.Variables {
 
 	vari := &ssr.Variables{
 		Vartype: typename,
@@ -187,20 +187,18 @@ func (Context *DebugContext) ResolveSingle(signed bool, bytesize int64, typename
 
 	if strings.Contains(strings.ToLower(typename), "int") {
 		if signed {
-			vari.Values = append(vari.Values, strconv.FormatInt(int64(value), 10))
+			vari.Values = append(vari.Values, strconv.FormatInt(int64(binary.LittleEndian.Uint64(value)), 10))
 		} else {
-			vari.Values = append(vari.Values, strconv.FormatUint(value, 10))
-		}
-		if strings.Contains(strings.ToLower(typename), "char") {
-			if signed {
-				vari.Values = append(vari.Values, strconv.Itoa(int(value)))
-			} else {
-				vari.Values = append(vari.Values, strconv.FormatUint(value, 10))
-			}
+			vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
 		}
 		// float
-	} else {
-		vari.Values = append(vari.Values, "0")
+	}
+	if strings.Contains(strings.ToLower(typename), "char") {
+		if signed {
+			vari.Values = append(vari.Values, string(value))
+		} else {
+			vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
+		}
 	}
 	return vari
 }
@@ -250,7 +248,7 @@ func (Context *DebugContext) ResolveVars() {
 
 				out.Name = current.AttrField(dwarf.AttrName).Val.(string)
 
-				Context.FollowedSym = append(Context.FollowedSym, out)
+				Context.AppendSymbol(out)
 
 				Context.DwarfReader.Seek(current.Offset)
 				Context.DwarfReader.Next()
@@ -276,22 +274,40 @@ func (Context *DebugContext) ResolveVars() {
 
 				sign, size, name := Context.GetEncoding(ptrtype)
 
-				addr, err := Context.getVariableValue(current, 8)
+				data, err := Context.getVariableValue(current, 8)
+
+				addr := binary.LittleEndian.Uint64(data)
 
 				if err != nil {
 					Context.Logger.Println("ERROR: ", err.Error())
 				}
 
-				data := uint64(0)
+				data = []byte{0x00}
+
 				if addr != 0 {
-					data = binary.LittleEndian.Uint64(Context.PeekDataWrapper(uintptr(addr), 8))
+					data = make([]byte, 0)
+					// If a pointer is char* type, read until null termination 0x00.
+					if strings.Contains(name, "char") {
+						i := uint64(0)
+						for {
+							char := Context.PeekDataWrapper(uintptr(addr+i), 1)[0]
+							data = append(data, char)
+							// if no 0x00, then the size of i is the safeguard against a soft lock.
+							if char == 0x00 || i > 1024 {
+								break
+							}
+							i++
+						}
+					} else {
+						data = Context.PeekDataWrapper(uintptr(addr), int(size))
+					}
 				}
 
 				out := Context.ResolveSingle(sign, size, name, data)
 
 				out.Name = "*" + current.AttrField(dwarf.AttrName).Val.(string)
 
-				Context.FollowedSym = append(Context.FollowedSym, out)
+				Context.AppendSymbol(out)
 
 				Context.DwarfReader.Seek(current.Offset)
 				Context.DwarfReader.Next()
@@ -301,4 +317,15 @@ func (Context *DebugContext) ResolveVars() {
 			}
 		}
 	}
+}
+
+// Appends a symbol to the followed symbols, if a symbol already exists, replace values.
+func (ctx *DebugContext) AppendSymbol(variable *ssr.Variables) {
+	for i := 0; i < len(ctx.FollowedSym); i++ {
+		if ctx.FollowedSym[i].Name == variable.Name {
+			ctx.FollowedSym[i] = variable
+			return
+		}
+	}
+	ctx.FollowedSym = append(ctx.FollowedSym, variable)
 }

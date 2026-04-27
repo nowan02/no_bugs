@@ -74,14 +74,18 @@
             </div>
         </div>
         <div class="column-container">
-            <div class="row-container">
+            <div style="display: flex; flex-direction: row; justify-content: center;">
                 <!--Locals-->
-                <div>
-
-                </div>
-                <!--Watch-->
-                <div>
-
+                <div class="column-container">
+                {{range .Variables}}
+                    <div style="display: flex; flex-direction: row; justify-content: center;">
+                    <div style="margin: 4px;">{{.Vartype}}</div>
+                    <div style="margin: 4px;">{{.Name}}</div>
+                    {{range .Values}}
+                    <div style="margin: 4px;">{{.}}</div>
+                    {{end}}
+                    </div>
+                {{end}}
                 </div>
             </div>
         </div>

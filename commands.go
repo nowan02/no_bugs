@@ -2,6 +2,7 @@ package main
 
 import (
 	"debug/dwarf"
+	"no_bugs/ssr"
 	"slices"
 	"strconv"
 	"syscall"
@@ -18,6 +19,8 @@ func (dbgs Session) Update(result chan bool, dp *Display) {
 	}
 	// Update vars below:
 	dbgs.Context.ResolveVars()
+
+	dp.Variables = dbgs.Context.FollowedSym
 
 	result <- true
 }
@@ -85,6 +88,9 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 
 							dbgs.Context.CallStack.Push(entry, returnaddress)
 
+							// Reset followed symbols when changing scope
+							dbgs.Context.FollowedSym = make([]*ssr.Variables, 0)
+
 							dbgs.Context.Logger.Println("Subprogram: ", entry.AttrField(dwarf.AttrName).Val.(string), "was put on the stack.")
 
 						}
@@ -93,6 +99,8 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 					if dbgs.Context.CallStack.Last().ReturnAddress == dbgs.Context.Target.Regs.Rip {
 						dbgs.Context.Logger.Println("Instruction pointer points to last entry's rbp, pop top element from stack.")
 						dbgs.Context.CallStack.Pop()
+						// Reset followed symbols when changing scope
+						dbgs.Context.FollowedSym = make([]*ssr.Variables, 0)
 					}
 				}
 
