@@ -72,10 +72,33 @@ func (Context *DebugContext) LookForSymbolByDWARFOffset(offset dwarf.Offset) (*d
 	return entry, err
 }
 
+func decode_sleb128(data []byte) int64 {
+	var result int64
+	shift := 0
+
+	var bytedata byte
+
+	for i := range len(data) {
+		bytedata = data[i]
+		result |= int64(bytedata&0x7f) << shift
+		shift += 7
+		if (bytedata & 0x80) == 0 {
+			break
+		}
+	}
+
+	if shift < 64 && bytedata&0x40 != 0 {
+		result |= ^0 << shift
+	}
+
+	return result
+}
+
 // Gets dwarf entry and calculates offset
 // Since local variables always have a negative offset in relation to the stack base pointer
 // positive values are assumed to be global offsets!
 // Entry: DWARF entry of variable to resolve, length: number of bytes to read.
+// Length: number of bytes to read from address
 func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) ([]byte, error) {
 	ent := Entry.AttrField(dwarf.AttrLocation)
 
@@ -101,19 +124,18 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) ([
 			offset_bytes = append(offset_bytes, 0x00)
 		}
 
-		var offset_val int64 = 0
-		var data []byte = make([]byte, 0)
+		offset_val := decode_sleb128(offset_bytes)
+		data := make([]byte, 0)
 
 		switch Opcode {
 		// Global offset
 		case 0x03:
-			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes))
 			address := Context.TextareaBegin + uint64(offset_val)
 			data = Context.PeekDataWrapper(uintptr(address), length)
 		// Local offset
 		case 0x91:
-			offset_val = int64(binary.LittleEndian.Uint64(offset_bytes)) - 128 + 16
-			address := int64(Context.Target.Regs.Rbp) + offset_val
+			offset_val = offset_val + 16
+			address := Context.Target.Regs.Rbp + uint64(offset_val)
 			data = Context.PeekDataWrapper(uintptr(address), length)
 		default:
 			return nil, errors.New("location data was not in the expected format ([]byte)")
@@ -185,21 +207,24 @@ func (Context *DebugContext) ResolveSingle(signed bool, bytesize int64, typename
 		Name:    "Unknown",
 	}
 
-	if strings.Contains(strings.ToLower(typename), "int") {
-		if signed {
-			vari.Values = append(vari.Values, strconv.FormatInt(int64(binary.LittleEndian.Uint64(value)), 10))
-		} else {
-			vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
+	if len(value) != 0 {
+		if strings.Contains(strings.ToLower(typename), "int") {
+			if signed {
+				vari.Values = append(vari.Values, strconv.FormatInt(int64(binary.LittleEndian.Uint64(value)), 10))
+			} else {
+				vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
+			}
+			// float
 		}
-		// float
-	}
-	if strings.Contains(strings.ToLower(typename), "char") {
-		if signed {
-			vari.Values = append(vari.Values, string(value))
-		} else {
-			vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
+		if strings.Contains(strings.ToLower(typename), "char") {
+			if signed {
+				vari.Values = append(vari.Values, string(value))
+			} else {
+				vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
+			}
 		}
 	}
+
 	return vari
 }
 
@@ -292,8 +317,8 @@ func (Context *DebugContext) ResolveVars() {
 						for {
 							char := Context.PeekDataWrapper(uintptr(addr+i), 1)[0]
 							data = append(data, char)
-							// if no 0x00, then the size of i is the safeguard against a soft lock.
-							if char == 0x00 || i > 1024 {
+							// if no 0x00, read until we reach the end of the stack frame.
+							if char == 0x00 || uintptr(addr+i) > uintptr(Context.Target.Regs.Rsp) {
 								break
 							}
 							i++
@@ -315,9 +340,59 @@ func (Context *DebugContext) ResolveVars() {
 
 				Context.DwarfReader.Seek(current.Offset)
 				Context.DwarfReader.Next()
-			case dwarf.TagArrayType:
 
+			case dwarf.TagArrayType:
+				arraytype, err := Context.getVariableType(typeentry)
+				if err != nil {
+					Context.Logger.Println("ERROR: ", err.Error())
+				}
+
+				Context.DwarfReader.Seek(typeentry.Offset)
+				// First returns the array type
+				Context.DwarfReader.Next()
+				// the next entry after an array type is the associated subrange
+				subrangetype, err := Context.DwarfReader.Next()
+
+				if err != nil {
+					Context.Logger.Println("ERROR:", err.Error())
+				}
+
+				sign, size, name := Context.GetEncoding(arraytype)
+
+				// Get the size of the array from subrange
+				arraysize, ok := subrangetype.AttrField(dwarf.AttrUpperBound).Val.(int64)
+				if !ok {
+					arraysize = 0
+				} else {
+					// upper bound attribute reflects the maximal index, starts from 0
+					arraysize++
+				}
+
+				arrayvar := Context.ResolveSingle(sign, size, name, make([]byte, 0))
+				arrayvar.Vartype = arrayvar.Vartype + "[" + strconv.FormatInt(arraysize-1, 10) + "]"
+				arrayvar.Name = current.AttrField(dwarf.AttrName).Val.(string)
+
+				data, err := Context.getVariableValue(current, int(arraysize*size))
+
+				if err != nil {
+					Context.Logger.Println("ERROR:", err.Error())
+				}
+
+				var resolvedelement *ssr.Variables
+
+				for i := int64(0); i < arraysize; i++ {
+					elem_data := make([]byte, 8)
+					copy(elem_data, data[i*size:i*size+size])
+					resolvedelement = Context.ResolveSingle(sign, size, name, elem_data)
+					arrayvar.Values = append(arrayvar.Values, resolvedelement.Values[0])
+				}
+
+				Context.AppendSymbol(arrayvar)
+
+				Context.DwarfReader.Seek(current.Offset)
+				Context.DwarfReader.Next()
 			default:
+				Context.Logger.Println("Unimplemented variable resolution, skipping.")
 			}
 		}
 	}
