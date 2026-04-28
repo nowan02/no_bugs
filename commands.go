@@ -42,6 +42,8 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 			return
 		}
 
+		dbgs.Context.Logger.Println("Waitstatus: ", dbgs.Context.Target.Wstat.StopSignal())
+
 		if dbgs.Context.Target.Wstat.Exited() {
 			if dbgs.Context.Target.Proc.Pid == wpid {
 				dbgs.Context.Logger.Fatalln("Traced process exited.")
