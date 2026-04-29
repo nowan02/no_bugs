@@ -4,6 +4,7 @@ import (
 	"debug/dwarf"
 	"encoding/binary"
 	"errors"
+	"math"
 	"no_bugs/ssr"
 	"strconv"
 	"strings"
@@ -141,7 +142,7 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) ([
 			return nil, errors.New("location data was not in the expected format ([]byte)")
 		}
 
-		// Expand data to 8 bytes in length
+		// Expand data to 8 bytes in length for easy conversion.
 		for len(data) < 8 {
 			data = append(data, 0x00)
 		}
@@ -151,6 +152,7 @@ func (Context *DebugContext) getVariableValue(Entry *dwarf.Entry, length int) ([
 	}
 }
 
+// Reads attributes from a type entry to determine whether a variable is signed, its size in bytes and the typename.
 func (Context *DebugContext) GetEncoding(Entry *dwarf.Entry) (signed bool, bytesize int64, name string) {
 	sign := false
 	size, ok := Entry.AttrField(dwarf.AttrByteSize).Val.(int64)
@@ -163,6 +165,8 @@ func (Context *DebugContext) GetEncoding(Entry *dwarf.Entry) (signed bool, bytes
 	enc, ok := Entry.AttrField(dwarf.AttrEncoding).Val.(int64)
 	if ok {
 		switch enc {
+		case 4:
+			sign = true
 		case 5:
 			sign = true
 		case 6:
@@ -214,8 +218,17 @@ func (Context *DebugContext) ResolveSingle(signed bool, bytesize int64, typename
 			} else {
 				vari.Values = append(vari.Values, strconv.FormatUint(binary.LittleEndian.Uint64(value), 10))
 			}
-			// float
 		}
+		if strings.Contains(strings.ToLower(typename), "float") {
+			f := math.Float32frombits(binary.LittleEndian.Uint32(value[0:4]))
+			vari.Values = append(vari.Values, strconv.FormatFloat(float64(f), 'f', -1, 32))
+		}
+
+		if strings.Contains(strings.ToLower(typename), "double") {
+			d := math.Float64frombits(binary.LittleEndian.Uint64(value))
+			vari.Values = append(vari.Values, strconv.FormatFloat(d, 'f', -1, 64))
+		}
+
 		if strings.Contains(strings.ToLower(typename), "char") {
 			if signed {
 				vari.Values = append(vari.Values, string(value))
@@ -228,6 +241,8 @@ func (Context *DebugContext) ResolveSingle(signed bool, bytesize int64, typename
 	return vari
 }
 
+// Seeks the current scopes entry and resolves all variables related to that scope.
+// The scope is always the last entry of the call stack.
 func (Context *DebugContext) ResolveVars() {
 	subp, err := Context.LookForSymbolByPC()
 

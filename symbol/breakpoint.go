@@ -65,7 +65,6 @@ func (Context *DebugContext) StepOverBreakpoint() (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		println("Ptrace poke")
 
 		// INT3 stops the program after its evaluation,
 		// set back PC with 1 byte after replacement to rerun the correct instruction.

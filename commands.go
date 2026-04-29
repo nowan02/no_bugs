@@ -82,10 +82,7 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 					} else {
 						// Add call stack entry if it is a subprogram.
 						if entry.Tag == dwarf.TagSubprogram {
-							PrintRegisters(dbgs.Context.Target.Regs)
-
 							// Push return address
-
 							returnaddress := dbgs.Context.GetCurrentReturnAddress()
 
 							dbgs.Context.CallStack.Push(entry, returnaddress)
