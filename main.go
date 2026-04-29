@@ -132,8 +132,23 @@ func main() {
 		DebugSession.logger.Println("Awaiting result.")
 		await(resultChannel, DebugSession.logger)
 
-		w.Header().Add("Content-Type", "")
-		http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
+		// If the continue loop exits, sets isRunning to false.
+		if !DebugSession.isRunning {
+			DebugSession.logger.Println("Tracee stopped, resetting.")
+			cmd := &Command{
+				cmd:  "stop",
+				arg1: nil,
+			}
+
+			DebugSession.logger.Println("Sending command...")
+			commandChannel <- *cmd
+
+			DebugSession.logger.Println("Command sent. Awaiting result...")
+			await(resultChannel, DebugSession.logger)
+
+			DebugSession.logger.Println("Stopping debugger.")
+			os.Exit(0)
+		}
 	})
 
 	http.HandleFunc("/stepover", func(w http.ResponseWriter, r *http.Request) {

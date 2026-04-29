@@ -46,7 +46,7 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 
 		if dbgs.Context.Target.Wstat.Exited() {
 			if dbgs.Context.Target.Proc.Pid == wpid {
-				dbgs.Context.Logger.Fatalln("Traced process exited.")
+				dbgs.Context.Logger.Println("Traced process exited.")
 				result <- false
 				break
 			}
@@ -59,9 +59,8 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 
 				// Only the main textarea is supported, stepping into library functions is not.
 				if dbgs.Context.Target.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Context.Target.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
-					dbgs.Context.Logger.Println("End of main(), let the program exit gracefully.")
-					dbgs.Context.Detach()
-					return
+					dbgs.Context.Logger.Println("End of main()")
+					break
 				}
 
 				// We have to substract 1 from PC to get the breakpoint address, since
@@ -82,8 +81,10 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 					} else {
 						// Add call stack entry if it is a subprogram.
 						if entry.Tag == dwarf.TagSubprogram {
+							dbgs.Context.Logger.Println("Entered a new subprogram.")
 							// Push return address
 							returnaddress := dbgs.Context.GetCurrentReturnAddress()
+							dbgs.Context.Logger.Println("Subprograms return address:", strconv.FormatUint(returnaddress, 16))
 
 							dbgs.Context.CallStack.Push(entry, returnaddress)
 

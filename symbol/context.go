@@ -162,8 +162,8 @@ func (ctx *DebugContext) Detach() {
 	ctx.Logger.Println("Detaching from tracee.")
 	err := syscall.PtraceDetach(ctx.Target.Proc.Pid)
 	if err != nil {
-		ctx.Logger.Println("FATAL: Detach unsuccessful.")
-		panic(err)
+		ctx.Logger.Println("FATAL: Detach unsuccessful, process no longer exists.")
+		return
 	}
 	ctx.Logger.Println("Detached tracee.")
 	ctx.Target.Stop()
