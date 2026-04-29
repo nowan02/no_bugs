@@ -166,4 +166,5 @@ func (ctx *DebugContext) Detach() {
 		panic(err)
 	}
 	ctx.Logger.Println("Detached tracee.")
+	ctx.Target.Stop()
 }

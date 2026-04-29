@@ -75,6 +75,13 @@ func Setup(name string, argv []string) *Tracee {
 	return &t
 }
 
+func (t *Tracee) Stop() {
+	t.logger.Println("Killing process.")
+	t.Proc.Release()
+	t.Proc.Kill()
+	t.logger.Println("Process killed.")
+}
+
 func (t *Tracee) GetDwarfInfo() (*dwarf.Data, error) {
 	t.logger.Println("Opening executable for reading.")
 	elfFile, err := elf.Open(t.ElfPath)

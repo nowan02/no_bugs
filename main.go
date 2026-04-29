@@ -296,9 +296,14 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool,
 			dbgs.StepOver(resultChannel)
 		case "stop":
 			dbgs.Context.Detach()
-			dbgs.logger.Println("Debugger detached, handing back control to OS.")
+			dbgs.logger.Println("Debugger detached.")
 			dbgs.isRunning = false
+			dbgs.logger.Println("Reset symbolic layer.")
+			dbgs.Context = &symbol.DebugContext{}
+			dbgs.logger.Println("Reset UI layer.")
+			dp = &Display{}
 			resultChannel <- true
+			runtime.UnlockOSThread()
 			return
 		case "update":
 			dbgs.Update(resultChannel, dp)
