@@ -81,4 +81,14 @@ Breakpoints can be placed by clicking on the blue line numbers on the left side 
 
 If the line has a valid statement, a breakpoint can be placed.
 
-![No breakpoint placed](/images/bp2.png)
+![Breakpoint placed](/images/bp2.png)
+
+Variables are displayed next to the source code, each are updated as the execution progresses.
+
+The display format is **Type** | **Name** | **Value(s)**
+
+![Variables in main()](/images/vars1.png)
+
+ When the process enters a new scope, the local variables are cleared from the previous scope and the new ones load.
+
+ ![Variables in outside_function()](/images/vars2.png)
