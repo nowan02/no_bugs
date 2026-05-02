@@ -12,6 +12,7 @@ import "C"
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"syscall"
 )
 
@@ -36,7 +37,7 @@ func (Context *DebugContext) SetBreakpoint(address uintptr, systemcreated bool) 
 		original := Context.PeekDataWrapper(address, 1)
 
 		if original[0] == 0xCC {
-			Context.Logger.Println("Address ", address, " already has a breakpoint.")
+			Context.Logger.Println("Address ", strconv.FormatUint(uint64(address), 16), " already has a breakpoint.")
 			return errors.New("Existing breakpoint can not be replaced with another breakpoint.")
 		}
 

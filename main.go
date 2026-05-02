@@ -149,6 +149,9 @@ func main() {
 			DebugSession.logger.Println("Stopping debugger.")
 			os.Exit(0)
 		}
+
+		w.Header().Add("Content-Type", "")
+		http.Redirect(w, r, "http://localhost:8080", http.StatusTemporaryRedirect)
 	})
 
 	http.HandleFunc("/stepover", func(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +262,7 @@ func main() {
 
 func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool, wg *sync.WaitGroup, dp *Display) {
 	runtime.LockOSThread()
-	ExeName, err := filepath.Abs("../bin/demo.out")
+	ExeName, err := filepath.Abs("./bin/demo.out")
 	ErrCheck(err)
 
 	tgt := target.Setup(ExeName, nil)
@@ -269,7 +272,7 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool,
 
 	dbgs.Context.TextareaBegin, dbgs.Context.TextareaEnd = dbgs.Context.Target.FindTextareaLinux()
 
-	dp.Lines, err = ssr.ReadSourceFile("../bin/main.c")
+	dp.Lines, err = ssr.ReadSourceFile("./bin/main.c")
 	ErrCheck(err)
 
 	// Place system breakpoint on all lines

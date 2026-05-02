@@ -1,9 +1,3 @@
-div {
-    border: red;
-    border-width: 1px;
-    border-style: dashed;
-}
-
 .row-container {
     display: flex;
     flex-direction: row;
