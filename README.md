@@ -75,7 +75,7 @@ The GUI supports display of local variables and 5 commands on the top row:
     * Starts the process to be debugged. The previous commands cannot be ran unless the traced process has started!
     * If the traced process is running, then it kills the process and exits the debugger.
 
-Breakpoints can be placed by clicking on the blue line numbers on the left side of the source code display. If the number turns red, the breakpoint was successfully placed on that row. **The debugger will stop at a breakpoint regardless of the command issued!**
+Breakpoints can be placed by clicking on the blue line numbers on the left side of the source code display. If the number turns red, the breakpoint was successfully placed on that row. **The debugger will always stop at a breakpoint regardless of the command issued!**
 
 ![No breakpoint placed](/images/bp1.png)
 
