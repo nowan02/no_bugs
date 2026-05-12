@@ -48,8 +48,7 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 		if dbgs.Context.Target.Wstat.Exited() {
 			if dbgs.Context.Target.Proc.Pid == wpid {
 				dbgs.Context.Logger.Println("Traced process exited.")
-				result <- false
-				break
+				dbgs.Stop()
 			}
 		} else {
 			// Debugger is currently stopped at a breakpoint or used single step.

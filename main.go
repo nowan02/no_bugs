@@ -114,7 +114,7 @@ func main() {
 
 	http.HandleFunc("/continue", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			DebugSession.logger.Println("Continue issued but tracee is not running! Start the program first.")
 			w.Header().Add("Content-Type", "")
 			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 			return
@@ -156,7 +156,7 @@ func main() {
 
 	http.HandleFunc("/stepover", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			DebugSession.logger.Println("Step over issued but tracee is not running! Start the program first.")
 			w.Header().Add("Content-Type", "")
 			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 			return
@@ -180,7 +180,7 @@ func main() {
 
 	http.HandleFunc("/stepinto", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			DebugSession.logger.Println("Step into issued but tracee is not running! Start the program first.")
 			w.Header().Add("Content-Type", "")
 			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 			return
@@ -204,7 +204,7 @@ func main() {
 
 	http.HandleFunc("/stepoutof", func(w http.ResponseWriter, r *http.Request) {
 		if !DebugSession.isRunning {
-			DebugSession.logger.Println("Tracee is not running! Start the program first.")
+			DebugSession.logger.Println("Step out of issued but tracee is not running! Start the program first.")
 			w.Header().Add("Content-Type", "")
 			http.Redirect(w, r, "http://localhost:8080/", http.StatusTemporaryRedirect)
 			return
@@ -324,7 +324,6 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool,
 	}
 }
 
-// REFACTOR!
 func ErrCheck(err error) {
 	if err != nil {
 		println(err.Error())
