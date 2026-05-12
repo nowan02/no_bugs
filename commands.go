@@ -3,6 +3,7 @@ package main
 import (
 	"debug/dwarf"
 	"no_bugs/ssr"
+	"os"
 	"slices"
 	"strconv"
 	"syscall"
@@ -59,7 +60,7 @@ func (dbgs *Session) Continue(SingleStep bool, result chan bool) {
 
 				// Only the main textarea is supported, stepping into library functions is not.
 				if dbgs.Context.Target.Regs.Rip < uint64(dbgs.Context.TextareaBegin) || dbgs.Context.Target.Regs.Rip > uint64(dbgs.Context.TextareaEnd) {
-					dbgs.Context.Logger.Println("End of main()")
+					dbgs.Context.Logger.Println("End of main(), process will exit.")
 					break
 				}
 
@@ -150,6 +151,11 @@ func (dbgs Session) StepOutOf(result chan bool) {
 			result <- false
 			return
 		}
+
+		if !dbgs.isRunning {
+			dbgs.Stop()
+		}
+
 		if l_stack > len(dbgs.Context.CallStack.Stack) ||
 			slices.Contains(dbgs.Context.UserBreakpoints, uintptr(dbgs.Context.Target.Regs.Rip)) {
 			break
@@ -214,4 +220,11 @@ func (dbgs Session) BreakOnLine(lineno int, result chan bool, dp *Display) {
 		dbgs.Context.Logger.Println("Breakpoint was set on line ", lineno, ".")
 		result <- true
 	}
+}
+
+func (dbgs Session) Stop() {
+	dbgs.Context.Detach()
+	dbgs.logger.Println("Debugger detached.")
+	dbgs.logger.Println("Stopping debugger.")
+	os.Exit(0)
 }
