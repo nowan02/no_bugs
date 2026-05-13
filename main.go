@@ -293,7 +293,7 @@ func (dbgs *Session) Setup(commandChannel chan Command, resultChannel chan bool,
 
 	for {
 		cmd := <-commandChannel
-		dbgs.logger.Println("Command received: ", cmd.cmd)
+		dbgs.Context.Logger.Println("Command received: ", cmd.cmd)
 		switch cmd.cmd {
 		case "continue":
 			dbgs.Continue(false, resultChannel)
